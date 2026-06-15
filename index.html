@@ -531,7 +531,7 @@ function openDeal(id){
     <div class="field"><label>商品名 <span class="hint">紹介対象の商品</span></label><input id="d_prod" value="${esc(d.productName||"")}" placeholder="例）リジュラン シナジー"></div>
     <div class="grid c2">
       <div class="field"><label>紹介対象金額（税抜）<span class="hint">販売額など</span></label><input id="d_base" type="number" class="num" value="${d.baseAmount||0}" oninput="calcPreview()"></div>
-      <div class="field"><label>マージン率（1〜10%）<span class="hint">商品ごとに手動設定</span></label><input id="d_rate" type="number" min="1" max="10" step="0.1" class="num" value="${d.marginRate||5}" oninput="calcPreview()"></div>
+      <div class="field"><label>マージン率（0〜10%）<span class="hint">商品ごとに手動設定。0%も可</span></label><input id="d_rate" type="number" min="0" max="10" step="0.1" class="num" value="${d.marginRate ?? 5}" oninput="calcPreview()"></div>
     </div>
     <div class="field"><label>消費税率 <span class="hint">紹介元の既定から自動。必要時のみ上書き</span></label>
       <select id="d_taxov" class="num" onchange="calcPreview()">
@@ -545,7 +545,7 @@ function openDeal(id){
   `,()=>{
     const base=parseFloat(val("d_base"))||0;
     const rate=parseFloat(val("d_rate"))||0;
-    if(rate<1||rate>10){toast("マージン率は 1〜10% で入力してください");return false;}
+    if(rate<0||rate>10){toast("マージン率は 0〜10% で入力してください");return false;}
     const ov=val("d_taxov");
     const obj={
       id:id||uid(),sourceId:val("d_src"),date:val("d_date"),
@@ -922,7 +922,7 @@ function orderCard(o,oi,opts){
             <td><strong>${esc(l.name)}</strong>${l.code?`<div style="font-size:11px;color:var(--muted)">${esc(l.code)}</div>`:""}</td>
             <td class="r num">${l.qty||""}</td>
             <td class="r num yen">${yen(l.sub)}</td>
-            <td class="r"><input type="number" min="1" max="10" step="0.1" class="num" style="text-align:right;padding:6px 8px" id="mr_${oi}_${li}" value="${def}" oninput="recalcLine(${oi},${li})" ${l.already?"disabled":""}></td>
+            <td class="r"><input type="number" min="0" max="10" step="0.1" class="num" style="text-align:right;padding:6px 8px" id="mr_${oi}_${li}" value="${def}" oninput="recalcLine(${oi},${li})" ${l.already?"disabled":""}></td>
             <td class="r num yen" id="fp_${oi}_${li}">0</td>
             <td class="r">${l.already?'<span class="tag paid">取込済</span>':""}</td>
           </tr>`;
@@ -961,7 +961,7 @@ function importOrder(oi){
   o.lines.forEach((l,li)=>{
     if(l.already)return;
     const rate=parseFloat(val(`mr_${oi}_${li}`))||0;
-    if(rate<1||rate>10){return;}
+    if(rate<0||rate>10){return;}
     DB.deals.push({
       id:uid(),sourceId:srcId,date:o.date,
       productName:l.name,baseAmount:l.sub,marginRate:rate,
@@ -972,7 +972,7 @@ function importOrder(oi){
     if(l.code)DB.productMargins[l.code]=rate; // 商品別マージンを記憶
     l.already=true;n++;
   });
-  if(n===0){toast("取り込める明細がありません（率は1〜10%、取込済を除く）");return;}
+  if(n===0){toast("取り込める明細がありません（率は0〜10%、取込済を除く）");return;}
   save();markAlready();drawImport();toast(`${n}件を取り込みました`);
 }
 function importAll(){
@@ -983,7 +983,7 @@ function importAll(){
     o.lines.forEach((l,li)=>{
       if(l.already)return;
       const rate=parseFloat(val(`mr_${oi}_${li}`))||0;
-      if(rate<1||rate>10)return;
+      if(rate<0||rate>10)return;
       DB.deals.push({id:uid(),sourceId:srcId,date:o.date,productName:l.name,baseAmount:l.sub,marginRate:rate,taxRateOverride:null,note:`Bカート 受注${o.orderNo||o.orderId}${l.code?" / "+l.code:""}（${esc(o.company)}）`,paid:false,importKey:ikey(o.orderId,l)});
       if(l.code)DB.productMargins[l.code]=rate;l.already=true;done++;
     });
