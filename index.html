@@ -441,7 +441,10 @@ function openSource(id){
         <select id="f_rate" class="num"><option value="10" ${s.taxRate===10?"selected":""}>10%</option><option value="8" ${s.taxRate===8?"selected":""}>8%</option></select></div>
     </div>
     <div class="field"><label>登録番号 <span class="hint">登録済の場合に入力（T＋13桁）</span></label><input id="f_inv" class="num" value="${esc(s.invoiceNumber||"")}" placeholder="T1234567890123"></div>
-    <div class="field"><label>連絡先 <span class="hint">任意</span></label><input id="f_contact" value="${esc(s.contact||"")}" placeholder="メール / 電話 など"></div>
+    <div class="grid c2">
+      <div class="field"><label>住所 <span class="hint">請求書（紹介元名義）の発行元欄に記載</span></label><input id="f_addr" value="${esc(s.address||"")}" placeholder="例）大阪市西区〇〇 1-2-3"></div>
+      <div class="field"><label>連絡先 <span class="hint">任意</span></label><input id="f_contact" value="${esc(s.contact||"")}" placeholder="メール / 電話 など"></div>
+    </div>
     <div class="card-h" style="padding:0;border:0;margin:6px 0 10px"><h2 style="font-size:13px">振込先（明細書に記載）</h2></div>
     <div class="grid c2">
       <div class="field"><label>金融機関名</label><input id="b_bank" value="${esc(b.bank||"")}" placeholder="〇〇銀行"></div>
@@ -461,6 +464,7 @@ function openSource(id){
       invoiceRegistered:val("f_reg")==="yes",
       taxRate:parseInt(val("f_rate")),
       invoiceNumber:val("f_inv").trim(),
+      address:val("f_addr").trim(),
       contact:val("f_contact").trim(),
       bank:{bank:val("b_bank").trim(),branch:val("b_branch").trim(),type:val("b_type"),number:val("b_num").trim(),holder:val("b_holder").trim()}
     };
@@ -580,7 +584,7 @@ function delDeal(id){confirmModal("取引を削除","この取引を削除しま
 /* =========================================================
    支払明細書 発行（弊社が代行発行＝仕入明細書方式）
 ========================================================= */
-let stmt={sourceId:"",from:"",to:"",onlyUnpaid:false};
+let stmt={sourceId:"",from:"",to:"",onlyUnpaid:false,mode:"pay"};
 function renderStatement(){
   const c=document.getElementById("content");
   if(DB.sources.length===0){c.innerHTML=`<div class="card"><div class="card-b">${emptyBox("紹介元がありません","先に紹介元と取引を登録してください")}</div></div>`;return;}
@@ -599,6 +603,11 @@ function renderStatement(){
           <div class="field"><label>対象期間（終了）</label><input id="s_to" type="date" class="num" value="${stmt.to}"></div>
           <div class="field"><label>対象</label><select id="s_unpaid"><option value="0" ${!stmt.onlyUnpaid?"selected":""}>全件</option><option value="1" ${stmt.onlyUnpaid?"selected":""}>未払のみ</option></select></div>
         </div>
+        <div class="field" style="max-width:560px"><label>発行形式</label>
+          <select id="s_mode">
+            <option value="pay" ${stmt.mode==="pay"?"selected":""}>支払明細書（弊社が発行 ／ 御中＝紹介元・発行元＝弊社）</option>
+            <option value="invoice" ${stmt.mode==="invoice"?"selected":""}>請求書（紹介元名義で代行発行 ／ 御中＝弊社・発行元＝紹介元）</option>
+          </select></div>
         <div style="display:flex;gap:10px">
           <button class="btn primary" onclick="buildStatement()">明細書を作成</button>
           <button class="btn" onclick="window.print()">印刷 / PDF保存</button>
@@ -607,11 +616,11 @@ function renderStatement(){
       </div>
     </div>
     <div id="stmtOut" style="margin-top:18px"></div>`;
-  ["s_src","s_from","s_to","s_unpaid"].forEach(id=>document.getElementById(id).addEventListener("change",syncStmt));
+  ["s_src","s_from","s_to","s_unpaid","s_mode"].forEach(id=>document.getElementById(id).addEventListener("change",()=>{syncStmt();buildStatement();}));
   buildStatement();
 }
 function syncStmt(){
-  stmt.sourceId=val("s_src");stmt.from=val("s_from");stmt.to=val("s_to");stmt.onlyUnpaid=val("s_unpaid")==="1";
+  stmt.sourceId=val("s_src");stmt.from=val("s_from");stmt.to=val("s_to");stmt.onlyUnpaid=val("s_unpaid")==="1";stmt.mode=val("s_mode")||"pay";
 }
 function periodDeals(){
   syncStmt();
@@ -640,31 +649,56 @@ function buildStatement(){
   const co=DB.company,bank=s.bank||{};
   const docNo=`${(s.name||"").slice(0,4)}-${(stmt.to||"").replace(/-/g,"")}`;
   const issueDate=new Date().toISOString().slice(0,10).replace(/-/g,"/");
+  const invoice = stmt.mode==="invoice"; // true: 紹介元名義の請求書 / false: 弊社発行の支払明細書
+
+  // 宛先（御中）と発行元のブロックを形式ごとに組み立て
+  const partyTo = invoice
+    ? `<div class="name">${esc(co.name||"自社名未設定")} 御中</div>
+        ${co.address?`<div class="line">${esc(co.address)}</div>`:""}
+        ${co.tel?`<div class="line">TEL ${esc(co.tel)}</div>`:""}
+        <div class="line" style="margin-top:8px">下記のとおり紹介手数料をご請求申し上げます。</div>`
+    : `<div class="name">${esc(s.name)} 御中</div>
+        ${s.invoiceRegistered&&s.invoiceNumber?`<div class="line">登録番号：${esc(s.invoiceNumber)}</div>`:""}
+        ${s.contact?`<div class="line">${esc(s.contact)}</div>`:""}
+        <div class="line" style="margin-top:8px">下記のとおり紹介手数料をお支払いいたします。</div>`;
+  const partyFrom = invoice
+    ? `<div class="co">${esc(s.name)}</div>
+        ${s.address?`<div>${esc(s.address)}</div>`:""}
+        ${s.contact?`<div>${esc(s.contact)}</div>`:""}
+        ${s.invoiceRegistered&&s.invoiceNumber?`<div>登録番号 ${esc(s.invoiceNumber)}</div>`:""}
+        <div style="margin-top:4px">　　　　　　㊞</div>`
+    : `<div class="co">${esc(co.name||"自社名未設定")}</div>
+        ${co.address?`<div>${esc(co.address)}</div>`:""}
+        ${co.tel?`<div>TEL ${esc(co.tel)}</div>`:""}
+        ${co.invoiceNumber?`<div>登録番号 ${esc(co.invoiceNumber)}</div>`:""}
+        ${co.rep?`<div style="margin-top:4px">${esc(co.rep)}　㊞</div>`:""}`;
+  const docTitle = invoice ? "請求書" : (DB.settings.docTitle||"支払明細書");
+  const docSub = invoice ? `紹介手数料 ／ ${esc(s.name)} 発行（弊社が代行作成）` : "紹介手数料 ／ 弊社代行発行（仕入明細書）";
+  const amtLabel = invoice ? "ご請求金額（税込）" : "お支払金額（税込）";
+  const agree = invoice
+    ? `本書は、貴社（弊社＝${esc(co.name||"")}）に対する紹介手数料について、${esc(s.name)}名義の請求書を弊社が代行して作成したものです。
+       記載内容にご相違がある場合は発行日より一定期間内にご連絡ください。`
+    : `本書は、貴殿（御社）が弊社に提供された紹介に対する手数料について、弊社が代行して作成・発行する支払明細書（仕入明細書）です。
+       記載内容にご相違がある場合は、発行日より一定期間内にご連絡ください。ご連絡なき場合は内容に合意いただいたものとして取り扱います。
+       ${!s.invoiceRegistered?`<br>※ 貴殿はインボイス（適格請求書発行事業者）未登録のため、消費税の取扱いは弊社の経理方針（${taxRows.map(t=>t.r+"%").join("/")} 適用）に基づきます。`:""}`;
 
   out.innerHTML=`
   <div class="card"><div class="card-b doc">
    <div class="doc-inner">
-    <h2 class="title">${esc(DB.settings.docTitle||"支払明細書")}</h2>
-    <div class="docsub">紹介手数料 ／ 弊社代行発行（仕入明細書）</div>
+    <h2 class="title">${esc(docTitle)}</h2>
+    <div class="docsub">${docSub}</div>
     <div class="doc-no">No. ${esc(docNo)}　発行日 ${issueDate}</div>
     <div class="doc-meta">
       <div class="doc-to">
-        <div class="name">${esc(s.name)} 御中</div>
-        ${s.invoiceRegistered&&s.invoiceNumber?`<div class="line">登録番号：${esc(s.invoiceNumber)}</div>`:""}
-        ${s.contact?`<div class="line">${esc(s.contact)}</div>`:""}
-        <div class="line" style="margin-top:8px">下記のとおり紹介手数料をお支払いいたします。</div>
+        ${partyTo}
       </div>
       <div class="doc-from">
-        <div class="co">${esc(co.name||"自社名未設定")}</div>
-        ${co.address?`<div>${esc(co.address)}</div>`:""}
-        ${co.tel?`<div>TEL ${esc(co.tel)}</div>`:""}
-        ${co.invoiceNumber?`<div>登録番号 ${esc(co.invoiceNumber)}</div>`:""}
-        ${co.rep?`<div style="margin-top:4px">${esc(co.rep)}　㊞</div>`:""}
+        ${partyFrom}
       </div>
     </div>
 
     <div class="doc-claim">
-      <div class="l">お支払金額（税込）</div>
+      <div class="l">${amtLabel}</div>
       <div class="amt num"><span class="yen2">¥</span>${yen(grand)}</div>
     </div>
 
@@ -687,7 +721,7 @@ function buildStatement(){
         <tr><td>消費税（${t.r}%）</td><td class="r num">${yen(t.tax)}</td></tr>`).join("")}
       <tr><td>合計（税抜）</td><td class="r num">${yen(netTotal)}</td></tr>
       <tr><td>消費税 合計</td><td class="r num">${yen(taxTotal)}</td></tr>
-      <tr class="grand"><td>お支払金額（税込）</td><td class="r num">${yen(grand)}</td></tr>
+      <tr class="grand"><td>${amtLabel}</td><td class="r num">${yen(grand)}</td></tr>
     </table>
 
     ${(bank.bank||bank.number)?`<div class="doc-bank">
@@ -698,9 +732,7 @@ function buildStatement(){
 
     <div class="doc-note">対象期間：${(stmt.from||"").replace(/-/g,"/")} 〜 ${(stmt.to||"").replace(/-/g,"/")}</div>
     <div class="doc-agree">
-      本書は、貴殿（御社）が弊社に提供された紹介に対する手数料について、弊社が代行して作成・発行する支払明細書（仕入明細書）です。
-      記載内容にご相違がある場合は、発行日より一定期間内にご連絡ください。ご連絡なき場合は内容に合意いただいたものとして取り扱います。
-      ${!s.invoiceRegistered?`<br>※ 貴殿はインボイス（適格請求書発行事業者）未登録のため、消費税の取扱いは弊社の経理方針（${taxRows.map(t=>t.r+"%").join("/")} 適用）に基づきます。`:""}
+      ${agree}
     </div>
    </div>
   </div></div>`;
