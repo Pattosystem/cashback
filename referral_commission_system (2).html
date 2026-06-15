@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>紹介手数料 還元・支払明細システム</title>
+<style>
+:root{
+  --ink:#16202e;        /* 深いインク */
+  --ink-2:#33414f;
+  --paper:#f5f7fa;      /* 冷たい紙色（クリーム回避）*/
+  --surface:#ffffff;
+  --line:#e2e7ee;
+  --line-strong:#cfd6e0;
+  --teal:#0f766e;       /* お金=確定の色 */
+  --teal-d:#0b5a54;
+  --amber:#b45309;      /* 免税/8% の注意色 */
+  --amber-bg:#fef4e6;
+  --red:#b42318;
+  --muted:#6b7785;
+  --muted-2:#9aa4b1;
+  --shadow:0 1px 2px rgba(16,32,46,.06),0 8px 24px rgba(16,32,46,.06);
+  --radius:10px;
+  --jp:"Hiragino Kaku Gothic ProN","Hiragino Sans","Yu Gothic",YuGothic,"Meiryo",sans-serif;
+  --mono:"SFMono-Regular",ui-monospace,"Roboto Mono","DejaVu Sans Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--jp);
+  background:var(--paper);
+  color:var(--ink);
+  font-size:14px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+/* 数字は等幅・揃える */
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;}
+.yen::before{content:"¥";opacity:.55;margin-right:1px;font-family:var(--mono);}
+
+/* ===== レイアウト ===== */
+.app{display:flex;min-height:100vh}
+.sidebar{
+  width:236px;flex:0 0 236px;background:var(--ink);color:#cdd6e2;
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;
+}
+.brand{padding:22px 22px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
+.brand .logo{font-weight:800;letter-spacing:.04em;color:#fff;font-size:17px}
+.brand .logo span{color:var(--teal);}
+.brand .sub{font-size:11px;color:#8a97a6;margin-top:3px;letter-spacing:.02em}
+.nav{padding:10px 12px;flex:1}
+.nav button{
+  width:100%;text-align:left;background:none;border:0;color:#aeb9c7;
+  padding:10px 14px;border-radius:8px;cursor:pointer;font-size:13.5px;font-family:var(--jp);
+  display:flex;align-items:center;gap:10px;margin-bottom:2px;transition:.12s;
+}
+.nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+.nav button.active{background:var(--teal);color:#fff;font-weight:600}
+.nav .ico{width:18px;text-align:center;opacity:.9}
+.sidebar .foot{padding:14px 18px;font-size:10.5px;color:#6c7888;border-top:1px solid rgba(255,255,255,.08)}
+
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{
+  background:var(--surface);border-bottom:1px solid var(--line);
+  padding:16px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+  position:sticky;top:0;z-index:5;
+}
+.topbar h1{font-size:18px;margin:0;font-weight:700}
+.topbar .desc{font-size:12px;color:var(--muted);margin-top:2px}
+.content{padding:24px 28px 60px;max-width:1180px;width:100%}
+
+/* ===== 部品 ===== */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card+.card{margin-top:18px}
+.card-h{padding:15px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.card-h h2{font-size:14.5px;margin:0;font-weight:700;letter-spacing:.01em}
+.card-b{padding:18px 20px}
+
+.btn{
+  font-family:var(--jp);font-size:13px;font-weight:600;border-radius:8px;cursor:pointer;
+  padding:9px 16px;border:1px solid var(--line-strong);background:#fff;color:var(--ink);transition:.12s;
+  display:inline-flex;align-items:center;gap:7px;
+}
+.btn:hover{background:#f1f4f8}
+.btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}
+.btn.primary:hover{background:var(--teal-d)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{background:#eef1f5;color:var(--ink)}
+.btn.danger{color:var(--red);border-color:#f0c8c4}
+.btn.danger:hover{background:#fdf1f0}
+.btn.sm{padding:5px 11px;font-size:12px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--ink-2);margin-bottom:5px}
+.field .hint{font-size:11px;color:var(--muted);font-weight:400;margin-left:6px}
+input,select,textarea{
+  width:100%;font-family:var(--jp);font-size:13.5px;padding:9px 11px;
+  border:1px solid var(--line-strong);border-radius:8px;background:#fff;color:var(--ink);transition:.12s;
+}
+input.num,select.num{font-family:var(--mono)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(15,118,110,.12)}
+textarea{resize:vertical;min-height:64px;line-height:1.5}
+.grid{display:grid;gap:14px}
+.grid.c2{grid-template-columns:1fr 1fr}
+.grid.c3{grid-template-columns:1fr 1fr 1fr}
+.grid.c4{grid-template-columns:repeat(4,1fr)}
+@media(max-width:760px){.grid.c2,.grid.c3,.grid.c4{grid-template-columns:1fr}}
+
+/* テーブル */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-size:11px;font-weight:700;color:var(--muted);text-transform:none;letter-spacing:.02em;background:#fafbfc;white-space:nowrap}
+td.r,th.r{text-align:right}
+tbody tr:hover{background:#f8fafc}
+.tbl-wrap{overflow-x:auto}
+
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;line-height:1.5}
+.tag.indiv{background:#eef2f9;color:#3a4f7a}
+.tag.corp{background:#e9f2f0;color:#0b5a54}
+.tag.reg{background:#e9f2f0;color:#0b5a54}
+.tag.noreg{background:var(--amber-bg);color:var(--amber)}
+.tag.r8{background:var(--amber-bg);color:var(--amber)}
+.tag.r10{background:#eef2f9;color:#3a4f7a}
+.tag.paid{background:#e9f2f0;color:#0b5a54}
+.tag.unpaid{background:#fdeeec;color:var(--red)}
+
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.empty .big{font-size:15px;color:var(--ink-2);font-weight:600;margin-bottom:6px}
+
+/* 統計タイル */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+@media(max-width:760px){.stats{grid-template-columns:1fr 1fr}}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+.stat .k{font-size:11.5px;color:var(--muted);font-weight:600}
+.stat .v{font-size:24px;font-weight:800;margin-top:6px;letter-spacing:-.01em}
+.stat .v small{font-size:13px;font-weight:600;color:var(--muted);margin-left:2px}
+.stat.accent .v{color:var(--teal)}
+.stat.warn .v{color:var(--amber)}
+
+/* 計算プレビュー */
+.calc{background:#f8fafc;border:1px dashed var(--line-strong);border-radius:10px;padding:14px 16px}
+.calc-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.calc-row.total{border-top:1px solid var(--line-strong);margin-top:6px;padding-top:9px;font-weight:800;font-size:16px}
+.calc-row .lbl{color:var(--muted)}
+
+/* モーダル */
+.modal-bg{position:fixed;inset:0;background:rgba(16,32,46,.45);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:40px 16px;overflow:auto}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:14px;max-width:620px;width:100%;box-shadow:0 24px 60px rgba(16,32,46,.25);animation:pop .16s ease}
+@keyframes pop{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+.modal-h{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.modal-h h3{margin:0;font-size:16px}
+.modal-b{padding:20px 22px;max-height:64vh;overflow:auto}
+.modal-f{padding:14px 22px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px}
+.x{border:0;background:none;font-size:22px;cursor:pointer;color:var(--muted);line-height:1}
+
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.toolbar .spacer{flex:1}
+.search{position:relative}
+.search input{padding-left:32px;min-width:220px}
+.search::before{content:"⌕";position:absolute;left:11px;top:8px;color:var(--muted-2);font-size:16px}
+
+.notice{font-size:12px;color:var(--amber);background:var(--amber-bg);border:1px solid #f3dcbf;border-radius:8px;padding:10px 13px;margin-bottom:14px;display:flex;gap:8px}
+.notice .i{font-weight:800}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:11px 20px;border-radius:999px;font-size:13px;font-weight:600;opacity:0;transition:.25s;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ===== 明細書プレビュー ===== */
+.doc{background:#fff;color:#1a1a1a;font-size:13px;line-height:1.7}
+.doc *{font-family:var(--jp)}
+.doc .num{font-family:var(--mono)}
+.doc-inner{padding:38px 42px}
+.doc h2.title{text-align:center;font-size:22px;letter-spacing:.4em;margin:0 0 4px;padding-left:.4em;font-weight:700}
+.doc .docsub{text-align:center;font-size:11px;color:#666;margin-bottom:24px;letter-spacing:.06em}
+.doc-meta{display:flex;justify-content:space-between;gap:30px;margin-bottom:22px}
+.doc-to{flex:1}
+.doc-to .name{font-size:17px;font-weight:700;border-bottom:1.5px solid #1a1a1a;padding-bottom:5px;display:inline-block;min-width:200px;margin-bottom:8px}
+.doc-to .line{font-size:12px;color:#444}
+.doc-from{text-align:right;font-size:12px;color:#333;min-width:230px}
+.doc-from .co{font-size:15px;font-weight:700;color:#111;margin-bottom:3px}
+.doc-no{font-size:11px;color:#666;text-align:right;margin-bottom:4px}
+.doc-claim{background:#f3f5f8;border:1px solid #d8dee6;border-radius:8px;padding:14px 18px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:center}
+.doc-claim .l{font-size:13px;font-weight:700}
+.doc-claim .amt{font-size:26px;font-weight:800;letter-spacing:.01em}
+.doc-claim .amt .yen2{font-size:18px;margin-right:3px}
+.doc table{font-size:12.5px;margin-bottom:18px}
+.doc table th{background:#1a2332;color:#fff;font-weight:600;border:1px solid #1a2332;padding:8px 10px}
+.doc table td{border:1px solid #d8dee6;padding:8px 10px}
+.doc table tfoot td{background:#f3f5f8;font-weight:700}
+.doc-tax{margin-left:auto;width:300px;font-size:12.5px}
+.doc-tax td{border:1px solid #d8dee6;padding:7px 11px}
+.doc-tax .grand td{background:#1a2332;color:#fff;font-weight:800;font-size:14px}
+.doc-bank{margin-top:22px;border:1px solid #d8dee6;border-radius:8px;padding:13px 16px;font-size:12px}
+.doc-bank .h{font-weight:700;margin-bottom:5px;font-size:12px}
+.doc-note{margin-top:16px;font-size:11px;color:#666;white-space:pre-wrap}
+.doc-agree{margin-top:24px;font-size:10.5px;color:#777;border-top:1px solid #e2e7ee;padding-top:10px}
+
+@media print{
+  @page{size:A4;margin:14mm}
+  body{background:#fff;font-size:12px}
+  .sidebar,.topbar,.no-print,.modal-f,.modal-h .x{display:none !important}
+  .app,.main,.content{display:block;padding:0;margin:0;max-width:none}
+  .modal-bg{position:static;background:none;display:block;padding:0;overflow:visible}
+  .modal{box-shadow:none;max-width:none;border-radius:0}
+  .modal-b{max-height:none;overflow:visible;padding:0}
+  .doc-inner{padding:0}
+  .card{box-shadow:none;border:0}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- サイドバー -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">LIAS<span>&middot;</span>Referral</div>
+      <div class="sub">紹介手数料 還元・支払管理</div>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-tab="dashboard" class="active"><span class="ico">▤</span>ダッシュボード</button>
+      <button data-tab="sources"><span class="ico">◍</span>紹介元 管理</button>
+      <button data-tab="deals"><span class="ico">✎</span>紹介取引 登録</button>
+      <button data-tab="statement"><span class="ico">▦</span>支払明細書 発行</button>
+      <button data-tab="csv"><span class="ico">⇪</span>CSV取込（Bカート）</button>
+      <button data-tab="settings"><span class="ico">⚙</span>設定 / バックアップ</button>
+    </nav>
+    <div class="foot">データはこのブラウザ内に保存されます（端末間で共有する場合は設定からエクスポート/インポート、または Firebase 連携を推奨）。</div>
+  </aside>
+
+  <!-- メイン -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h1 id="pageTitle">ダッシュボード</h1>
+        <div class="desc" id="pageDesc">紹介還元の状況と未払いを確認します</div>
+      </div>
+      <div id="topActions"></div>
+    </div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<!-- モーダル群 -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modal"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   ストレージ
+========================================================= */
+const KEY="lias_referral_v1";
+const DEFAULT={
+  company:{
+    name:"リアス株式会社",
+    address:"",
+    tel:"",
+    invoiceNumber:"",   // 自社のインボイス登録番号 T+13桁
+    rep:"",             // 代表者
+    bank:{bank:"",branch:"",type:"普通",number:"",holder:""}
+  },
+  settings:{
+    rounding:"floor",                 // floor / round / ceil
+    docTitle:"支払明細書",            // 明細書のタイトル
+    closingDay:31                     // 締め日（参考表示）
+  },
+  sources:[],
+  deals:[],
+  productMargins:{}                   // 商品管理番号 -> 既定マージン率（取込時の初期値）
+};
+function load(){
+  try{const r=localStorage.getItem(KEY);if(r){return Object.assign({},DEFAULT,JSON.parse(r));}}
+  catch(e){console.warn(e);}
+  return JSON.parse(JSON.stringify(DEFAULT));
+}
+let DB=load();
+function save(){localStorage.setItem(KEY,JSON.stringify(DB));}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+
+/* =========================================================
+   計算ロジック
+========================================================= */
+function roundFn(n){
+  const m=DB.settings.rounding;
+  if(m==="round")return Math.round(n);
+  if(m==="ceil")return Math.ceil(n);
+  return Math.floor(n); // 既定：切り捨て
+}
+// 1取引の手数料（税抜）= 対象金額 × マージン率%
+function feeOf(deal){ return roundFn(deal.baseAmount * deal.marginRate/100); }
+// 取引ごとの参考税額（明細書では税率ごとに合算後1回端数処理する）
+function lineTaxOf(deal){ return roundFn(feeOf(deal) * effRate(deal)/100); }
+// 適用税率：取引の上書き → 紹介元の既定 → 10%
+function effRate(deal){
+  if(deal.taxRateOverride===8||deal.taxRateOverride===10)return deal.taxRateOverride;
+  const s=DB.sources.find(s=>s.id===deal.sourceId);
+  return s? s.taxRate : 10;
+}
+function yen(n){ return (n<0?"-":"")+Math.abs(Math.round(n)).toLocaleString("ja-JP"); }
+function srcName(id){const s=DB.sources.find(s=>s.id===id);return s?s.name:"（削除済）";}
+
+/* =========================================================
+   画面ルーティング
+========================================================= */
+const PAGES={
+  dashboard:{t:"ダッシュボード",d:"紹介還元の状況と未払いを確認します",render:renderDashboard},
+  sources:{t:"紹介元 管理",d:"個人・法人の紹介元と税率・振込先を管理します",render:renderSources},
+  deals:{t:"紹介取引 登録",d:"購入のたびに紹介元・商品・マージン率を登録します",render:renderDeals},
+  statement:{t:"支払明細書 発行",d:"紹介元に代わって弊社が手数料の明細書を発行します",render:renderStatement},
+  csv:{t:"CSV取込（Bカート）",d:"受注CSVを取り込み、商品明細から還元取引を自動作成します",render:renderImport},
+  settings:{t:"設定 / バックアップ",d:"自社情報・端数処理・データの書き出し/読み込み",render:renderSettings}
+};
+let current="dashboard";
+function go(tab){
+  current=tab;
+  document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  document.getElementById("pageTitle").textContent=PAGES[tab].t;
+  document.getElementById("pageDesc").textContent=PAGES[tab].d;
+  document.getElementById("topActions").innerHTML="";
+  PAGES[tab].render();
+}
+document.getElementById("nav").addEventListener("click",e=>{
+  const b=e.target.closest("button");if(b)go(b.dataset.tab);
+});
+
+/* =========================================================
+   ダッシュボード
+========================================================= */
+function renderDashboard(){
+  const c=document.getElementById("content");
+  const deals=DB.deals;
+  let totalFee=0,totalTax=0,unpaidTotal=0,unpaidCount=0;
+  deals.forEach(d=>{
+    const f=feeOf(d),t=lineTaxOf(d);
+    totalFee+=f;totalTax+=t;
+    if(!d.paid){unpaidTotal+=f+t;unpaidCount++;}
+  });
+  const totalPay=totalFee+totalTax;
+
+  // 今月
+  const now=new Date(),ym=now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0");
+  let monthPay=0;
+  deals.forEach(d=>{ if((d.date||"").slice(0,7)===ym) monthPay+=feeOf(d)+lineTaxOf(d); });
+
+  c.innerHTML=`
+    <div class="stats">
+      <div class="stat accent"><div class="k">支払総額（税込・累計）</div><div class="v"><span class="yen num">${yen(totalPay)}</span></div></div>
+      <div class="stat"><div class="k">今月の発生額（税込）</div><div class="v"><span class="yen num">${yen(monthPay)}</span></div></div>
+      <div class="stat warn"><div class="k">未払い残高（税込）</div><div class="v"><span class="yen num">${yen(unpaidTotal)}</span> <small>${unpaidCount}件</small></div></div>
+      <div class="stat"><div class="k">紹介元 / 取引</div><div class="v"><span class="num">${DB.sources.length}</span><small>社・名</small> / <span class="num">${deals.length}</span><small>件</small></div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>紹介元別サマリー</h2>
+        <button class="btn sm primary" onclick="go('deals')">＋ 取引を登録</button></div>
+      <div class="card-b" style="padding:0">
+        ${sourceSummaryTable()}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h"><h2>直近の取引</h2></div>
+      <div class="card-b" style="padding:0">${recentDealsTable()}</div>
+    </div>
+  `;
+}
+function sourceSummaryTable(){
+  if(DB.sources.length===0)return emptyBox("紹介元がまだありません","「紹介元 管理」から登録してください");
+  const rows=DB.sources.map(s=>{
+    const ds=DB.deals.filter(d=>d.sourceId===s.id);
+    let fee=0,tax=0,unpaid=0;
+    ds.forEach(d=>{const f=feeOf(d),t=lineTaxOf(d);fee+=f;tax+=t;if(!d.paid)unpaid+=f+t;});
+    return `<tr>
+      <td><strong>${esc(s.name)}</strong> ${kindTag(s)} ${regTag(s)}</td>
+      <td>${rateTag(s.taxRate)}</td>
+      <td class="r num">${ds.length}</td>
+      <td class="r num yen">${yen(fee)}</td>
+      <td class="r num yen">${yen(fee+tax)}</td>
+      <td class="r num yen" style="color:${unpaid>0?'var(--red)':'var(--muted)'}">${yen(unpaid)}</td>
+    </tr>`;
+  }).join("");
+  return `<div class="tbl-wrap"><table>
+    <thead><tr><th>紹介元</th><th>既定税率</th><th class="r">件数</th><th class="r">手数料(税抜)</th><th class="r">支払(税込)</th><th class="r">未払</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+function recentDealsTable(){
+  const ds=[...DB.deals].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,8);
+  if(ds.length===0)return emptyBox("取引がまだありません","「紹介取引 登録」から購入実績を入力してください");
+  return `<div class="tbl-wrap"><table>
+    <thead><tr><th>日付</th><th>紹介元</th><th>商品</th><th class="r">対象額</th><th class="r">率</th><th class="r">手数料(税抜)</th><th class="r">税込</th><th>状態</th></tr></thead>
+    <tbody>${ds.map(d=>`<tr>
+      <td class="num">${d.date||"-"}</td>
+      <td>${esc(srcName(d.sourceId))}</td>
+      <td>${esc(d.productName||"-")}</td>
+      <td class="r num yen">${yen(d.baseAmount)}</td>
+      <td class="r num">${d.marginRate}%</td>
+      <td class="r num yen">${yen(feeOf(d))}</td>
+      <td class="r num yen">${yen(feeOf(d)+lineTaxOf(d))}</td>
+      <td>${d.paid?'<span class="tag paid">支払済</span>':'<span class="tag unpaid">未払</span>'}</td>
+    </tr>`).join("")}</tbody></table></div>`;
+}
+
+/* =========================================================
+   紹介元 管理
+========================================================= */
+function renderSources(){
+  document.getElementById("topActions").innerHTML=`<button class="btn primary" onclick="openSource()">＋ 紹介元を追加</button>`;
+  const c=document.getElementById("content");
+  c.innerHTML=`<div class="card"><div class="card-b" style="padding:0">${sourcesTable()}</div></div>`;
+}
+function sourcesTable(){
+  if(DB.sources.length===0)return emptyBox("紹介元がまだありません",'右上の「＋ 紹介元を追加」から登録してください');
+  return `<div class="tbl-wrap"><table>
+    <thead><tr><th>名称</th><th>種別</th><th>インボイス</th><th>既定税率</th><th>登録番号</th><th class="r">操作</th></tr></thead>
+    <tbody>${DB.sources.map(s=>`<tr>
+      <td><strong>${esc(s.name)}</strong>${s.contact?`<div style="font-size:11px;color:var(--muted)">${esc(s.contact)}</div>`:""}</td>
+      <td>${kindTag(s)}</td>
+      <td>${regTag(s)}</td>
+      <td>${rateTag(s.taxRate)}</td>
+      <td class="num" style="font-size:12px;color:var(--muted)">${esc(s.invoiceNumber||"—")}</td>
+      <td class="r"><button class="btn sm" onclick="openSource('${s.id}')">編集</button>
+        <button class="btn sm danger" onclick="delSource('${s.id}')">削除</button></td>
+    </tr>`).join("")}</tbody></table></div>`;
+}
+function openSource(id){
+  const s=id?DB.sources.find(x=>x.id===id):{kind:"individual",invoiceRegistered:false,taxRate:10,bank:{type:"普通"}};
+  const b=s.bank||{type:"普通"};
+  modal(`${id?"紹介元を編集":"紹介元を追加"}`,`
+    <div class="grid c2">
+      <div class="field"><label>名称 <span class="hint">個人名 / 会社名</span></label><input id="f_name" value="${esc(s.name||"")}" placeholder="例）山田太郎 / 〇〇クリニック"></div>
+      <div class="field"><label>種別</label>
+        <select id="f_kind"><option value="individual" ${s.kind==="individual"?"selected":""}>個人</option><option value="company" ${s.kind==="company"?"selected":""}>法人</option></select></div>
+    </div>
+    <div class="grid c2">
+      <div class="field"><label>インボイス登録</label>
+        <select id="f_reg"><option value="no" ${!s.invoiceRegistered?"selected":""}>未登録（免税事業者など）</option><option value="yes" ${s.invoiceRegistered?"selected":""}>登録済（適格請求書発行事業者）</option></select></div>
+      <div class="field"><label>既定の消費税率</label>
+        <select id="f_rate" class="num"><option value="10" ${s.taxRate===10?"selected":""}>10%</option><option value="8" ${s.taxRate===8?"selected":""}>8%</option></select></div>
+    </div>
+    <div class="field"><label>登録番号 <span class="hint">登録済の場合に入力（T＋13桁）</span></label><input id="f_inv" class="num" value="${esc(s.invoiceNumber||"")}" placeholder="T1234567890123"></div>
+    <div class="field"><label>連絡先 <span class="hint">任意</span></label><input id="f_contact" value="${esc(s.contact||"")}" placeholder="メール / 電話 など"></div>
+    <div class="card-h" style="padding:0;border:0;margin:6px 0 10px"><h2 style="font-size:13px">振込先（明細書に記載）</h2></div>
+    <div class="grid c2">
+      <div class="field"><label>金融機関名</label><input id="b_bank" value="${esc(b.bank||"")}" placeholder="〇〇銀行"></div>
+      <div class="field"><label>支店名</label><input id="b_branch" value="${esc(b.branch||"")}" placeholder="〇〇支店"></div>
+    </div>
+    <div class="grid c3">
+      <div class="field"><label>種別</label><select id="b_type"><option ${b.type==="普通"?"selected":""}>普通</option><option ${b.type==="当座"?"selected":""}>当座</option></select></div>
+      <div class="field"><label>口座番号</label><input id="b_num" class="num" value="${esc(b.number||"")}"></div>
+      <div class="field"><label>口座名義</label><input id="b_holder" value="${esc(b.holder||"")}"></div>
+    </div>
+  `,()=>{
+    const name=val("f_name").trim();
+    if(!name){toast("名称を入力してください");return false;}
+    const obj={
+      id:id||uid(),name,
+      kind:val("f_kind"),
+      invoiceRegistered:val("f_reg")==="yes",
+      taxRate:parseInt(val("f_rate")),
+      invoiceNumber:val("f_inv").trim(),
+      contact:val("f_contact").trim(),
+      bank:{bank:val("b_bank").trim(),branch:val("b_branch").trim(),type:val("b_type"),number:val("b_num").trim(),holder:val("b_holder").trim()}
+    };
+    if(id){const i=DB.sources.findIndex(x=>x.id===id);DB.sources[i]=obj;}
+    else DB.sources.push(obj);
+    save();go("sources");toast("保存しました");
+  });
+}
+function delSource(id){
+  const cnt=DB.deals.filter(d=>d.sourceId===id).length;
+  confirmModal("紹介元を削除",`「${esc(srcName(id))}」を削除します。${cnt>0?`<br><strong style="color:var(--red)">関連する取引 ${cnt} 件も削除されます。</strong>`:""}`,()=>{
+    DB.sources=DB.sources.filter(s=>s.id!==id);
+    DB.deals=DB.deals.filter(d=>d.sourceId!==id);
+    save();go("sources");toast("削除しました");
+  });
+}
+
+/* =========================================================
+   紹介取引 登録
+========================================================= */
+let dealFilter="";
+function renderDeals(){
+  document.getElementById("topActions").innerHTML=`<button class="btn primary" onclick="openDeal()" ${DB.sources.length?"":"disabled"}>＋ 取引を登録</button>`;
+  const c=document.getElementById("content");
+  if(DB.sources.length===0){
+    c.innerHTML=`<div class="card"><div class="card-b">${emptyBox("先に紹介元の登録が必要です","「紹介元 管理」で個人・法人を追加してから取引を登録します")}<div style="text-align:center"><button class="btn primary" onclick="go('sources')">紹介元を登録する</button></div></div></div>`;
+    return;
+  }
+  c.innerHTML=`
+    <div class="toolbar">
+      <div class="search"><input id="dsearch" placeholder="紹介元・商品で検索" value="${esc(dealFilter)}"></div>
+      <div class="spacer"></div>
+      <button class="btn sm" onclick="exportDealsCSV()">CSV書き出し</button>
+    </div>
+    <div class="card"><div class="card-b" style="padding:0" id="dealList"></div></div>`;
+  document.getElementById("dsearch").addEventListener("input",e=>{dealFilter=e.target.value;drawDeals();});
+  drawDeals();
+}
+function drawDeals(){
+  const q=dealFilter.trim().toLowerCase();
+  let ds=[...DB.deals].sort((a,b)=>(b.date||"").localeCompare(a.date||""));
+  if(q)ds=ds.filter(d=>srcName(d.sourceId).toLowerCase().includes(q)||(d.productName||"").toLowerCase().includes(q));
+  const el=document.getElementById("dealList");
+  if(ds.length===0){el.innerHTML=emptyBox("該当する取引がありません","");return;}
+  el.innerHTML=`<div class="tbl-wrap"><table>
+    <thead><tr><th>日付</th><th>紹介元</th><th>商品</th><th class="r">対象金額</th><th class="r">率</th><th class="r">手数料(税抜)</th><th class="r">税</th><th class="r">税込</th><th>状態</th><th class="r">操作</th></tr></thead>
+    <tbody>${ds.map(d=>{const f=feeOf(d),t=lineTaxOf(d);return `<tr>
+      <td class="num">${d.date||"-"}</td>
+      <td>${esc(srcName(d.sourceId))}</td>
+      <td>${esc(d.productName||"-")}${d.note?`<div style="font-size:11px;color:var(--muted)">${esc(d.note)}</div>`:""}</td>
+      <td class="r num yen">${yen(d.baseAmount)}</td>
+      <td class="r num">${d.marginRate}%</td>
+      <td class="r num yen">${yen(f)}</td>
+      <td class="r num"><span style="font-size:11px;color:var(--muted)">${effRate(d)}%</span> <span class="yen">${yen(t)}</span></td>
+      <td class="r num yen"><strong>${yen(f+t)}</strong></td>
+      <td><span class="tag ${d.paid?'paid':'unpaid'}" style="cursor:pointer" onclick="togglePaid('${d.id}')">${d.paid?'支払済':'未払'}</span></td>
+      <td class="r"><button class="btn sm" onclick="openDeal('${d.id}')">編集</button><button class="btn sm danger" onclick="delDeal('${d.id}')">削除</button></td>
+    </tr>`;}).join("")}</tbody></table></div>`;
+}
+function openDeal(id){
+  const d=id?DB.deals.find(x=>x.id===id):{date:new Date().toISOString().slice(0,10),marginRate:5,baseAmount:0};
+  const opts=DB.sources.map(s=>`<option value="${s.id}" ${d.sourceId===s.id?"selected":""}>${esc(s.name)}（${s.kind==="company"?"法人":"個人"}・既定${s.taxRate}%）</option>`).join("");
+  modal(`${id?"取引を編集":"取引を登録"}`,`
+    <div class="grid c2">
+      <div class="field"><label>紹介元</label><select id="d_src">${opts}</select></div>
+      <div class="field"><label>取引日</label><input id="d_date" type="date" class="num" value="${d.date||""}"></div>
+    </div>
+    <div class="field"><label>商品名 <span class="hint">紹介対象の商品</span></label><input id="d_prod" value="${esc(d.productName||"")}" placeholder="例）リジュラン シナジー"></div>
+    <div class="grid c2">
+      <div class="field"><label>紹介対象金額（税抜）<span class="hint">販売額など</span></label><input id="d_base" type="number" class="num" value="${d.baseAmount||0}" oninput="calcPreview()"></div>
+      <div class="field"><label>マージン率（1〜10%）<span class="hint">商品ごとに手動設定</span></label><input id="d_rate" type="number" min="1" max="10" step="0.1" class="num" value="${d.marginRate||5}" oninput="calcPreview()"></div>
+    </div>
+    <div class="field"><label>消費税率 <span class="hint">紹介元の既定から自動。必要時のみ上書き</span></label>
+      <select id="d_taxov" class="num" onchange="calcPreview()">
+        <option value="">既定（紹介元の設定に従う）</option>
+        <option value="10" ${d.taxRateOverride===10?"selected":""}>10% に上書き</option>
+        <option value="8" ${d.taxRateOverride===8?"selected":""}>8% に上書き</option>
+      </select></div>
+    <div class="field"><label>メモ <span class="hint">任意</span></label><input id="d_note" value="${esc(d.note||"")}" placeholder="ロット番号・備考など"></div>
+    <div class="field"><label>支払状態</label><select id="d_paid"><option value="0" ${!d.paid?"selected":""}>未払</option><option value="1" ${d.paid?"selected":""}>支払済</option></select></div>
+    <div class="calc" id="calcBox"></div>
+  `,()=>{
+    const base=parseFloat(val("d_base"))||0;
+    const rate=parseFloat(val("d_rate"))||0;
+    if(rate<1||rate>10){toast("マージン率は 1〜10% で入力してください");return false;}
+    const ov=val("d_taxov");
+    const obj={
+      id:id||uid(),sourceId:val("d_src"),date:val("d_date"),
+      productName:val("d_prod").trim(),baseAmount:base,marginRate:rate,
+      taxRateOverride: ov?parseInt(ov):null,
+      note:val("d_note").trim(),paid:val("d_paid")==="1"
+    };
+    if(id){const i=DB.deals.findIndex(x=>x.id===id);DB.deals[i]=obj;}
+    else DB.deals.push(obj);
+    save();go("deals");toast("保存しました");
+  });
+  calcPreview();
+}
+function calcPreview(){
+  const box=document.getElementById("calcBox");if(!box)return;
+  const base=parseFloat(val("d_base"))||0;
+  const rate=parseFloat(val("d_rate"))||0;
+  const ov=val("d_taxov");
+  const src=DB.sources.find(s=>s.id===val("d_src"));
+  const trate= ov? parseInt(ov) : (src?src.taxRate:10);
+  const fee=roundFn(base*rate/100);
+  const tax=roundFn(fee*trate/100);
+  box.innerHTML=`
+    <div class="calc-row"><span class="lbl">紹介手数料（税抜）= ${yen(base)} × ${rate||0}%</span><span class="num yen">${yen(fee)}</span></div>
+    <div class="calc-row"><span class="lbl">消費税（${trate}%）</span><span class="num yen">${yen(tax)}</span></div>
+    <div class="calc-row total"><span>支払額（税込）</span><span class="num yen">${yen(fee+tax)}</span></div>`;
+}
+function togglePaid(id){const d=DB.deals.find(x=>x.id===id);if(d){d.paid=!d.paid;save();drawDeals();renderDealsBadge();}}
+function renderDealsBadge(){if(current==="dashboard")renderDashboard();}
+function delDeal(id){confirmModal("取引を削除","この取引を削除します。よろしいですか？",()=>{DB.deals=DB.deals.filter(d=>d.id!==id);save();go("deals");toast("削除しました");});}
+
+/* =========================================================
+   支払明細書 発行（弊社が代行発行＝仕入明細書方式）
+========================================================= */
+let stmt={sourceId:"",from:"",to:"",onlyUnpaid:false};
+function renderStatement(){
+  const c=document.getElementById("content");
+  if(DB.sources.length===0){c.innerHTML=`<div class="card"><div class="card-b">${emptyBox("紹介元がありません","先に紹介元と取引を登録してください")}</div></div>`;return;}
+  const today=new Date();
+  if(!stmt.from){const f=new Date(today.getFullYear(),today.getMonth(),1);stmt.from=f.toISOString().slice(0,10);}
+  if(!stmt.to){const l=new Date(today.getFullYear(),today.getMonth()+1,0);stmt.to=l.toISOString().slice(0,10);}
+  if(!stmt.sourceId)stmt.sourceId=DB.sources[0].id;
+  const opts=DB.sources.map(s=>`<option value="${s.id}" ${stmt.sourceId===s.id?"selected":""}>${esc(s.name)}</option>`).join("");
+  c.innerHTML=`
+    <div class="card no-print">
+      <div class="card-h"><h2>発行条件</h2></div>
+      <div class="card-b">
+        <div class="grid c4">
+          <div class="field"><label>紹介元</label><select id="s_src">${opts}</select></div>
+          <div class="field"><label>対象期間（開始）</label><input id="s_from" type="date" class="num" value="${stmt.from}"></div>
+          <div class="field"><label>対象期間（終了）</label><input id="s_to" type="date" class="num" value="${stmt.to}"></div>
+          <div class="field"><label>対象</label><select id="s_unpaid"><option value="0" ${!stmt.onlyUnpaid?"selected":""}>全件</option><option value="1" ${stmt.onlyUnpaid?"selected":""}>未払のみ</option></select></div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn primary" onclick="buildStatement()">明細書を作成</button>
+          <button class="btn" onclick="window.print()">印刷 / PDF保存</button>
+          <button class="btn" onclick="markPeriodPaid()">対象期間を支払済にする</button>
+        </div>
+      </div>
+    </div>
+    <div id="stmtOut" style="margin-top:18px"></div>`;
+  ["s_src","s_from","s_to","s_unpaid"].forEach(id=>document.getElementById(id).addEventListener("change",syncStmt));
+  buildStatement();
+}
+function syncStmt(){
+  stmt.sourceId=val("s_src");stmt.from=val("s_from");stmt.to=val("s_to");stmt.onlyUnpaid=val("s_unpaid")==="1";
+}
+function periodDeals(){
+  syncStmt();
+  return DB.deals.filter(d=>d.sourceId===stmt.sourceId
+    && (!stmt.from||d.date>=stmt.from) && (!stmt.to||d.date<=stmt.to)
+    && (!stmt.onlyUnpaid||!d.paid))
+    .sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+}
+function buildStatement(){
+  const ds=periodDeals();
+  const s=DB.sources.find(x=>x.id===stmt.sourceId);
+  const out=document.getElementById("stmtOut");
+  if(!s){out.innerHTML="";return;}
+  if(ds.length===0){out.innerHTML=`<div class="card"><div class="card-b">${emptyBox("対象期間に取引がありません","期間や対象条件を変更してください")}</div></div>`;return;}
+
+  // 税率ごとに税抜を集計 → 税率ごとに1回だけ端数処理（インボイス制度のルール）
+  const byRate={};
+  ds.forEach(d=>{const r=effRate(d);byRate[r]=(byRate[r]||0)+feeOf(d);});
+  let netTotal=0,taxTotal=0;
+  const taxRows=Object.keys(byRate).sort().map(r=>{
+    const net=byRate[r];const tax=roundFn(net*r/100);
+    netTotal+=net;taxTotal+=tax;
+    return {r:+r,net,tax};
+  });
+  const grand=netTotal+taxTotal;
+  const co=DB.company,bank=s.bank||{};
+  const docNo=`${(s.name||"").slice(0,4)}-${(stmt.to||"").replace(/-/g,"")}`;
+  const issueDate=new Date().toISOString().slice(0,10).replace(/-/g,"/");
+
+  out.innerHTML=`
+  <div class="card"><div class="card-b doc">
+   <div class="doc-inner">
+    <h2 class="title">${esc(DB.settings.docTitle||"支払明細書")}</h2>
+    <div class="docsub">紹介手数料 ／ 弊社代行発行（仕入明細書）</div>
+    <div class="doc-no">No. ${esc(docNo)}　発行日 ${issueDate}</div>
+    <div class="doc-meta">
+      <div class="doc-to">
+        <div class="name">${esc(s.name)} 御中</div>
+        ${s.invoiceRegistered&&s.invoiceNumber?`<div class="line">登録番号：${esc(s.invoiceNumber)}</div>`:""}
+        ${s.contact?`<div class="line">${esc(s.contact)}</div>`:""}
+        <div class="line" style="margin-top:8px">下記のとおり紹介手数料をお支払いいたします。</div>
+      </div>
+      <div class="doc-from">
+        <div class="co">${esc(co.name||"自社名未設定")}</div>
+        ${co.address?`<div>${esc(co.address)}</div>`:""}
+        ${co.tel?`<div>TEL ${esc(co.tel)}</div>`:""}
+        ${co.invoiceNumber?`<div>登録番号 ${esc(co.invoiceNumber)}</div>`:""}
+        ${co.rep?`<div style="margin-top:4px">${esc(co.rep)}　㊞</div>`:""}
+      </div>
+    </div>
+
+    <div class="doc-claim">
+      <div class="l">お支払金額（税込）</div>
+      <div class="amt num"><span class="yen2">¥</span>${yen(grand)}</div>
+    </div>
+
+    <table>
+      <thead><tr><th style="width:90px">取引日</th><th>商品 / 内容</th><th style="width:90px" class="r">対象金額</th><th style="width:50px" class="r">率</th><th style="width:50px" class="r">税率</th><th style="width:100px" class="r">手数料(税抜)</th></tr></thead>
+      <tbody>
+      ${ds.map(d=>`<tr>
+        <td class="num">${(d.date||"").replace(/-/g,"/")}</td>
+        <td>${esc(d.productName||"紹介手数料")}${d.note?`　<span style="color:#888">${esc(d.note)}</span>`:""}</td>
+        <td class="r num">${yen(d.baseAmount)}</td>
+        <td class="r num">${d.marginRate}%</td>
+        <td class="r num">${effRate(d)}%</td>
+        <td class="r num">${yen(feeOf(d))}</td>
+      </tr>`).join("")}
+      </tbody>
+    </table>
+
+    <table class="doc-tax">
+      ${taxRows.map(t=>`<tr><td>${t.r}%対象 小計（税抜）</td><td class="r num">${yen(t.net)}</td></tr>
+        <tr><td>消費税（${t.r}%）</td><td class="r num">${yen(t.tax)}</td></tr>`).join("")}
+      <tr><td>合計（税抜）</td><td class="r num">${yen(netTotal)}</td></tr>
+      <tr><td>消費税 合計</td><td class="r num">${yen(taxTotal)}</td></tr>
+      <tr class="grand"><td>お支払金額（税込）</td><td class="r num">${yen(grand)}</td></tr>
+    </table>
+
+    ${(bank.bank||bank.number)?`<div class="doc-bank">
+      <div class="h">お振込先</div>
+      ${esc(bank.bank||"")} ${esc(bank.branch||"")} ／ ${esc(bank.type||"普通")} ${esc(bank.number||"")}<br>
+      口座名義：${esc(bank.holder||"")}
+    </div>`:""}
+
+    <div class="doc-note">対象期間：${(stmt.from||"").replace(/-/g,"/")} 〜 ${(stmt.to||"").replace(/-/g,"/")}</div>
+    <div class="doc-agree">
+      本書は、貴殿（御社）が弊社に提供された紹介に対する手数料について、弊社が代行して作成・発行する支払明細書（仕入明細書）です。
+      記載内容にご相違がある場合は、発行日より一定期間内にご連絡ください。ご連絡なき場合は内容に合意いただいたものとして取り扱います。
+      ${!s.invoiceRegistered?`<br>※ 貴殿はインボイス（適格請求書発行事業者）未登録のため、消費税の取扱いは弊社の経理方針（${taxRows.map(t=>t.r+"%").join("/")} 適用）に基づきます。`:""}
+    </div>
+   </div>
+  </div></div>`;
+}
+function markPeriodPaid(){
+  const ds=periodDeals().filter(d=>!d.paid);
+  if(ds.length===0){toast("未払いの取引はありません");return;}
+  confirmModal("支払済にする",`対象期間の未払い ${ds.length} 件を「支払済」にします。`,()=>{
+    ds.forEach(d=>d.paid=true);save();buildStatement();toast("支払済に更新しました");
+  });
+}
+
+/* =========================================================
+   設定 / バックアップ
+========================================================= */
+function renderSettings(){
+  const co=DB.company,b=co.bank||{},st=DB.settings;
+  const c=document.getElementById("content");
+  c.innerHTML=`
+  <div class="card">
+    <div class="card-h"><h2>自社情報（明細書の発行元）</h2></div>
+    <div class="card-b">
+      <div class="grid c2">
+        <div class="field"><label>会社名</label><input id="c_name" value="${esc(co.name||"")}"></div>
+        <div class="field"><label>代表者名</label><input id="c_rep" value="${esc(co.rep||"")}"></div>
+      </div>
+      <div class="field"><label>住所</label><input id="c_addr" value="${esc(co.address||"")}"></div>
+      <div class="grid c2">
+        <div class="field"><label>電話番号</label><input id="c_tel" value="${esc(co.tel||"")}"></div>
+        <div class="field"><label>自社の登録番号 <span class="hint">T＋13桁</span></label><input id="c_inv" class="num" value="${esc(co.invoiceNumber||"")}"></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>発行設定</h2></div>
+    <div class="card-b">
+      <div class="grid c2">
+        <div class="field"><label>明細書のタイトル</label><input id="s_title" value="${esc(st.docTitle||"支払明細書")}"></div>
+        <div class="field"><label>消費税の端数処理</label>
+          <select id="s_round"><option value="floor" ${st.rounding==="floor"?"selected":""}>切り捨て</option><option value="round" ${st.rounding==="round"?"selected":""}>四捨五入</option><option value="ceil" ${st.rounding==="ceil"?"selected":""}>切り上げ</option></select></div>
+      </div>
+      <div style="text-align:right"><button class="btn primary" onclick="saveSettings()">設定を保存</button></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-h"><h2>データのバックアップ</h2></div>
+    <div class="card-b">
+      <p style="font-size:12.5px;color:var(--muted);margin-top:0">データはこのブラウザ内に保存されます。別の端末へ移す・定期的に保管する場合は JSON を書き出してください。</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" onclick="exportJSON()">全データを書き出し（JSON）</button>
+        <button class="btn" onclick="document.getElementById('imp').click()">JSONを読み込み</button>
+        <input type="file" id="imp" accept="application/json" style="display:none" onchange="importJSON(event)">
+        <button class="btn danger" onclick="wipe()">全データを初期化</button>
+      </div>
+    </div>
+  </div>
+  <div class="notice"><span class="i">税務上のご注意</span>
+    <div>消費税率（8%/10%）や免税事業者の取扱いは経理・税務の判断を伴います。本ツールは入力どおりに計算・書類化するもので、税務助言ではありません。最終的な取扱いは顧問税理士にご確認ください。</div>
+  </div>`;
+}
+function saveSettings(){
+  DB.company={name:val("c_name").trim(),rep:val("c_rep").trim(),address:val("c_addr").trim(),tel:val("c_tel").trim(),invoiceNumber:val("c_inv").trim(),bank:DB.company.bank||{}};
+  DB.settings.docTitle=val("s_title").trim()||"支払明細書";
+  DB.settings.rounding=val("s_round");
+  save();toast("設定を保存しました");
+}
+function exportJSON(){
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:"application/json"});
+  dl(blob,`lias_referral_${new Date().toISOString().slice(0,10)}.json`);
+}
+function importJSON(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{const o=JSON.parse(r.result);DB=Object.assign({},DEFAULT,o);save();go("dashboard");toast("読み込みました");}catch(err){toast("読み込みに失敗しました");}};
+  r.readAsText(f);e.target.value="";
+}
+function exportDealsCSV(){
+  const head=["取引日","紹介元","種別","商品","対象金額(税抜)","マージン率%","手数料(税抜)","税率%","消費税","支払額(税込)","状態","メモ"];
+  const rows=DB.deals.map(d=>{const s=DB.sources.find(x=>x.id===d.sourceId)||{};const f=feeOf(d),t=lineTaxOf(d);
+    return [d.date,srcName(d.sourceId),s.kind==="company"?"法人":"個人",d.productName,d.baseAmount,d.marginRate,f,effRate(d),t,f+t,d.paid?"支払済":"未払",d.note||""];});
+  const csv=[head,...rows].map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
+  dl(new Blob(["\uFEFF"+csv],{type:"text/csv"}),`referral_deals_${new Date().toISOString().slice(0,10)}.csv`);
+}
+function wipe(){confirmModal("全データを初期化","紹介元・取引・設定をすべて削除します。元に戻せません。書き出し済みのバックアップがあるかご確認ください。",()=>{DB=JSON.parse(JSON.stringify(DEFAULT));save();go("dashboard");toast("初期化しました");});}
+
+/* =========================================================
+   CSV取込（Bカート受注CSV）
+========================================================= */
+let importStage=[];   // 取込待ちの注文配列
+function renderImport(){
+  importStage=[];
+  const c=document.getElementById("content");
+  if(DB.sources.length===0){
+    c.innerHTML=`<div class="card"><div class="card-b">${emptyBox("先に紹介元の登録が必要です","CSVを取り込んでも還元先（紹介元）を選べるようにしておく必要があります")}<div style="text-align:center"><button class="btn primary" onclick="go('sources')">紹介元を登録する</button></div></div></div>`;
+    return;
+  }
+  c.innerHTML=`
+    <div class="card no-print">
+      <div class="card-h"><h2>受注CSVを取り込む</h2></div>
+      <div class="card-b">
+        <p style="font-size:12.5px;color:var(--muted);margin-top:0">Bカートの受注CSV（Shift-JIS / UTF-8 自動判別）を選択してください。<strong>商品行のみ</strong>を還元対象として取り込み、送料・値引き等の行は自動的に除外します。計算基礎は各行の<strong>小計（税抜）</strong>です。</p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn primary" onclick="document.getElementById('csvfile').click()">CSVファイルを選択</button>
+          <input type="file" id="csvfile" accept=".csv,text/csv" style="display:none" onchange="handleCSV(event)">
+          <span id="csvName" style="font-size:12.5px;color:var(--muted)"></span>
+        </div>
+      </div>
+    </div>
+    <div id="importOut" style="margin-top:18px"></div>`;
+}
+async function handleCSV(e){
+  const f=e.target.files[0];if(!f)return;
+  document.getElementById("csvName").textContent=f.name;
+  try{
+    const text=await readSmart(f);
+    const rows=parseCSV(text).filter(r=>r.some(c=>String(c).trim()!==""));
+    if(rows.length<2){toast("データ行が見つかりません");return;}
+    const H={};rows[0].forEach((h,i)=>{H[String(h).replace(/^\uFEFF/,"").trim()]=i;});
+    const need=["受注ID","商品名","小計","明細区分"];
+    const miss=need.filter(n=>H[n]==null);
+    if(miss.length){toast("想定の列が見つかりません："+miss.join("・"));return;}
+    const col=(r,n)=>{const i=H[n];return i==null?"":(r[i]||"");};
+    const numOf=v=>Number(String(v).replace(/[, ¥]/g,""))||0;
+    // 受注IDごとにまとめる
+    const map={};
+    rows.slice(1).forEach(r=>{
+      const oid=col(r,"受注ID").trim();if(!oid)return;
+      if(!map[oid]){
+        map[oid]={
+          orderId:oid,
+          orderNo:col(r,"受注番号").trim(),
+          company:col(r,"会社名").trim(),
+          person:col(r,"担当者").trim(),
+          group:col(r,"価格グループ").trim(),
+          memberId:col(r,"Bカート会員ID").trim(),
+          date:(col(r,"受注日時").trim()||"").slice(0,10),
+          lines:[]
+        };
+      }
+      if(col(r,"明細区分").trim()!=="商品")return; // 送料・値引き等は除外
+      map[oid].lines.push({
+        seq:col(r,"受注内連番").trim(),
+        code:col(r,"商品管理番号").trim()||col(r,"品番").trim(),
+        name:col(r,"商品名").trim(),
+        sub:numOf(col(r,"小計")),
+        unit:numOf(col(r,"単価")),
+        qty:numOf(col(r,"受注数")),
+        taxRate:numOf(col(r,"税率"))||10
+      });
+    });
+    importStage=Object.values(map).filter(o=>o.lines.length>0);
+    if(importStage.length===0){toast("商品行が見つかりませんでした");return;}
+    markAlready();
+    drawImport();
+  }catch(err){console.error(err);toast("CSVの読み込みに失敗しました");}
+  e.target.value="";
+}
+// 文字コード自動判別（UTF-8優先、ダメならShift-JIS）
+async function readSmart(file){
+  const buf=await file.arrayBuffer();
+  let t=new TextDecoder("utf-8").decode(buf);
+  if(t.indexOf("受注")===-1 && t.indexOf("商品")===-1){
+    try{t=new TextDecoder("shift_jis").decode(buf);}catch(e){}
+  }
+  return t.replace(/^\uFEFF/,"");
+}
+// 簡易CSVパーサ（"で囲まれたフィールド・改行に対応）
+function parseCSV(text){
+  const rows=[];let row=[],cur="",q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){
+      if(ch==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; }
+      else cur+=ch;
+    }else{
+      if(ch==='"')q=true;
+      else if(ch===','){row.push(cur);cur="";}
+      else if(ch==='\r'){}
+      else if(ch==='\n'){row.push(cur);rows.push(row);row=[];cur="";}
+      else cur+=ch;
+    }
+  }
+  if(cur!==""||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+function ikey(orderId,line){return "bcart:"+orderId+"#"+(line.code||line.seq||line.name);}
+function markAlready(){
+  const set=new Set(DB.deals.map(d=>d.importKey).filter(Boolean));
+  importStage.forEach(o=>o.lines.forEach(l=>l.already=set.has(ikey(o.orderId,l))));
+}
+function drawImport(){
+  const out=document.getElementById("importOut");
+  const opts=DB.sources.map(s=>`<option value="${s.id}">${esc(s.name)}（${s.kind==="company"?"法人":"個人"}・既定${s.taxRate}%）</option>`).join("");
+  const total=importStage.reduce((a,o)=>a+o.lines.filter(l=>!l.already).length,0);
+  out.innerHTML=`
+    <div class="toolbar no-print">
+      <div style="font-size:13px;color:var(--muted)">取込候補：注文 <strong class="num">${importStage.length}</strong> 件 / 未取込の商品行 <strong class="num">${total}</strong></div>
+      <div class="spacer"></div>
+      <button class="btn primary" onclick="importAll()" ${total?"":"disabled"}>すべて取り込む</button>
+    </div>
+    ${importStage.map((o,oi)=>orderCard(o,oi,opts)).join("")}`;
+  importStage.forEach((o,oi)=>o.lines.forEach((l,li)=>recalcLine(oi,li)));
+}
+function orderCard(o,oi,opts){
+  return `<div class="card" style="margin-bottom:16px">
+    <div class="card-h">
+      <h2>${esc(o.company||"（会社名なし）")} <span style="font-weight:400;font-size:12px;color:var(--muted)">／ ${esc(o.person||"-")}　会員ID:${esc(o.memberId||"-")}</span></h2>
+      <div style="font-size:12px;color:var(--muted)">受注 ${esc(o.orderNo||o.orderId)}　${esc(o.date||"")}　${o.group?`<span class="tag r10">${esc(o.group)}</span>`:""}</div>
+    </div>
+    <div class="card-b">
+      <div class="field" style="max-width:380px"><label>還元先（紹介元）を選択</label>
+        <select id="src_${oi}" onchange="recalcOrder(${oi})"><option value="">— 選択してください —</option>${opts}</select></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>商品</th><th class="r">数量</th><th class="r">小計(税抜)</th><th class="r" style="width:120px">マージン率%</th><th class="r">手数料(税抜)</th><th></th></tr></thead>
+        <tbody>
+        ${o.lines.map((l,li)=>{
+          const def=DB.productMargins[l.code]!=null?DB.productMargins[l.code]:5;
+          return `<tr style="${l.already?'opacity:.5':''}">
+            <td><strong>${esc(l.name)}</strong>${l.code?`<div style="font-size:11px;color:var(--muted)">${esc(l.code)}</div>`:""}</td>
+            <td class="r num">${l.qty||""}</td>
+            <td class="r num yen">${yen(l.sub)}</td>
+            <td class="r"><input type="number" min="1" max="10" step="0.1" class="num" style="text-align:right;padding:6px 8px" id="mr_${oi}_${li}" value="${def}" oninput="recalcLine(${oi},${li})" ${l.already?"disabled":""}></td>
+            <td class="r num yen" id="fp_${oi}_${li}">0</td>
+            <td class="r">${l.already?'<span class="tag paid">取込済</span>':""}</td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+        <tfoot><tr><td colspan="4" class="r" style="font-weight:700">手数料 合計（税抜・未取込分）</td><td class="r num yen" id="ot_${oi}" style="font-weight:800">0</td><td></td></tr></tfoot>
+      </table></div>
+      <div style="text-align:right;margin-top:12px"><button class="btn primary" onclick="importOrder(${oi})">この注文を取り込む</button></div>
+    </div></div>`;
+}
+function recalcLine(oi,li){
+  const l=importStage[oi].lines[li];
+  const inp=document.getElementById(`mr_${oi}_${li}`);
+  const fp=document.getElementById(`fp_${oi}_${li}`);
+  if(!fp)return;
+  const rate=inp?parseFloat(inp.value)||0:0;
+  const fee=l.already?0:roundFn(l.sub*rate/100);
+  fp.innerHTML='<span class="yen">'+yen(l.already?roundFn(l.sub*rate/100):fee)+'</span>';
+  recalcOrder(oi);
+}
+function recalcOrder(oi){
+  let sum=0;
+  importStage[oi].lines.forEach((l,li)=>{
+    if(l.already)return;
+    const inp=document.getElementById(`mr_${oi}_${li}`);
+    const rate=inp?parseFloat(inp.value)||0:0;
+    sum+=roundFn(l.sub*rate/100);
+  });
+  const ot=document.getElementById(`ot_${oi}`);if(ot)ot.innerHTML='<span class="yen">'+yen(sum)+'</span>';
+}
+function importOrder(oi){
+  const o=importStage[oi];
+  const srcId=val(`src_${oi}`);
+  if(!srcId){toast("還元先（紹介元）を選択してください");return;}
+  let n=0;
+  o.lines.forEach((l,li)=>{
+    if(l.already)return;
+    const rate=parseFloat(val(`mr_${oi}_${li}`))||0;
+    if(rate<1||rate>10){return;}
+    DB.deals.push({
+      id:uid(),sourceId:srcId,date:o.date,
+      productName:l.name,baseAmount:l.sub,marginRate:rate,
+      taxRateOverride:null,
+      note:`Bカート 受注${o.orderNo||o.orderId}${l.code?" / "+l.code:""}（${esc(o.company)}）`,
+      paid:false,importKey:ikey(o.orderId,l)
+    });
+    if(l.code)DB.productMargins[l.code]=rate; // 商品別マージンを記憶
+    l.already=true;n++;
+  });
+  if(n===0){toast("取り込める明細がありません（率は1〜10%、取込済を除く）");return;}
+  save();markAlready();drawImport();toast(`${n}件を取り込みました`);
+}
+function importAll(){
+  let done=0,skipped=0;
+  importStage.forEach((o,oi)=>{
+    const srcId=val(`src_${oi}`);
+    if(!srcId){skipped++;return;}
+    o.lines.forEach((l,li)=>{
+      if(l.already)return;
+      const rate=parseFloat(val(`mr_${oi}_${li}`))||0;
+      if(rate<1||rate>10)return;
+      DB.deals.push({id:uid(),sourceId:srcId,date:o.date,productName:l.name,baseAmount:l.sub,marginRate:rate,taxRateOverride:null,note:`Bカート 受注${o.orderNo||o.orderId}${l.code?" / "+l.code:""}（${esc(o.company)}）`,paid:false,importKey:ikey(o.orderId,l)});
+      if(l.code)DB.productMargins[l.code]=rate;l.already=true;done++;
+    });
+  });
+  save();markAlready();drawImport();
+  toast(done?`${done}件を取り込みました${skipped?`（紹介元未選択の${skipped}注文はスキップ）`:""}`:"紹介元が未選択のため取り込めませんでした");
+}
+
+/* =========================================================
+   汎用 UI ヘルパ
+========================================================= */
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
+function val(id){const e=document.getElementById(id);return e?e.value:"";}
+function kindTag(s){return s.kind==="company"?'<span class="tag corp">法人</span>':'<span class="tag indiv">個人</span>';}
+function regTag(s){return s.invoiceRegistered?'<span class="tag reg">登録</span>':'<span class="tag noreg">未登録</span>';}
+function rateTag(r){return r===8?'<span class="tag r8">8%</span>':'<span class="tag r10">10%</span>';}
+function emptyBox(big,sub){return `<div class="empty"><div class="big">${big}</div>${sub?`<div>${sub}</div>`:""}</div>`;}
+function dl(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);}
+
+let onSave=null;
+function modal(title,body,save){
+  onSave=save;
+  document.getElementById("modal").innerHTML=`
+    <div class="modal-h"><h3>${title}</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-b">${body}</div>
+    <div class="modal-f"><button class="btn ghost" onclick="closeModal()">キャンセル</button><button class="btn primary" onclick="doSave()">保存</button></div>`;
+  document.getElementById("modalBg").classList.add("open");
+}
+function confirmModal(title,body,ok){
+  onSave=null;
+  document.getElementById("modal").innerHTML=`
+    <div class="modal-h"><h3>${title}</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="modal-b"><p style="margin:0">${body}</p></div>
+    <div class="modal-f"><button class="btn ghost" onclick="closeModal()">キャンセル</button><button class="btn danger" id="okBtn">実行</button></div>`;
+  document.getElementById("modalBg").classList.add("open");
+  document.getElementById("okBtn").onclick=()=>{closeModal();ok();};
+}
+function doSave(){if(onSave){const r=onSave();if(r!==false)closeModal();}}
+function closeModal(){document.getElementById("modalBg").classList.remove("open");onSave=null;}
+document.getElementById("modalBg").addEventListener("click",e=>{if(e.target.id==="modalBg")closeModal();});
+
+let toastT;
+function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),2200);}
+
+/* 起動 */
+go("dashboard");
+</script>
+</body>
+</html>
