@@ -226,7 +226,7 @@ tbody tr:hover{background:#f8fafc}
       <button data-tab="csv"><span class="ico">⇪</span>CSV取込（Bカート）</button>
       <button data-tab="settings"><span class="ico">⚙</span>設定 / バックアップ</button>
     </nav>
-    <div class="foot">データはこのブラウザ内に保存されます（端末間で共有する場合は設定からエクスポート/インポート、または Firebase 連携を推奨）。</div>
+    <div class="foot"><span id="cloudStat">クラウド同期：OFF（この端末のみ）</span><br>共有するには「設定 / バックアップ」→ クラウド同期（Supabase）を設定してください。</div>
   </aside>
 
   <!-- メイン -->
@@ -282,7 +282,79 @@ function load(){
   return JSON.parse(JSON.stringify(DEFAULT));
 }
 let DB=load();
-function save(){localStorage.setItem(KEY,JSON.stringify(DB));}
+function save(){localStorage.setItem(KEY,JSON.stringify(DB));schedulePush();}
+
+/* =========================================================
+   クラウド同期（Supabase / 任意・端末ごとに設定）
+   テーブル: cashback_state(id text pk, data jsonb, updated_at timestamptz)
+========================================================= */
+const CLOUDKEY="lias_referral_cloud";
+let CLOUD=loadCloud();
+function loadCloud(){try{return Object.assign({url:"",key:"",enabled:false},JSON.parse(localStorage.getItem(CLOUDKEY)||"{}"));}catch(e){return {url:"",key:"",enabled:false};}}
+function saveCloud(){localStorage.setItem(CLOUDKEY,JSON.stringify(CLOUD));}
+function cloudOn(){return !!(CLOUD.enabled&&CLOUD.url&&CLOUD.key);}
+function cloudHeaders(){return {"apikey":CLOUD.key,"Authorization":"Bearer "+CLOUD.key,"Content-Type":"application/json"};}
+function cloudUrl(path){return CLOUD.url.replace(/\/+$/,"")+"/rest/v1/"+path;}
+let cloudStatus="off",pushTimer=null;
+function cloudStatusLabel(){
+  if(!cloudOn())return "クラウド同期：OFF（この端末のみ）";
+  return {idle:"クラウド同期：ON（接続中）",saving:"クラウド同期：保存中…",error:"クラウド同期：エラー"}[cloudStatus]||"クラウド同期：ON";
+}
+function setCloudStatus(s){cloudStatus=s;const el=document.getElementById("cloudStat");if(el)el.textContent=cloudStatusLabel();const e2=document.getElementById("cloudStat2");if(e2)e2.textContent=cloudStatusLabel();}
+async function cloudPull(){
+  if(!cloudOn())return false;
+  try{
+    const r=await fetch(cloudUrl("cashback_state?id=eq.main&select=data"),{headers:cloudHeaders()});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    const rows=await r.json();
+    if(rows&&rows[0]&&rows[0].data){
+      DB=Object.assign({},DEFAULT,rows[0].data);
+      DB.settings=Object.assign({},DEFAULT.settings,DB.settings||{});
+      localStorage.setItem(KEY,JSON.stringify(DB));
+    }
+    setCloudStatus("idle");return true;
+  }catch(e){console.warn("pull",e);setCloudStatus("error");return false;}
+}
+async function cloudPush(){
+  if(!cloudOn())return;
+  setCloudStatus("saving");
+  try{
+    const body=[{id:"main",data:DB,updated_at:new Date().toISOString()}];
+    const r=await fetch(cloudUrl("cashback_state"),{method:"POST",headers:Object.assign({Prefer:"resolution=merge-duplicates"},cloudHeaders()),body:JSON.stringify(body)});
+    if(!r.ok)throw new Error("HTTP "+r.status+" "+(await r.text()));
+    setCloudStatus("idle");return true;
+  }catch(e){console.warn("push",e);setCloudStatus("error");toast("クラウド保存に失敗しました");return false;}
+}
+function schedulePush(){if(!cloudOn())return;clearTimeout(pushTimer);setCloudStatus("saving");pushTimer=setTimeout(cloudPush,800);}
+function enableCloud(){
+  const url=val("cl_url").trim(),key=val("cl_key").trim();
+  if(!url||!key){toast("URLとanon keyを入力してください");return;}
+  CLOUD.url=url;CLOUD.key=key;CLOUD.enabled=true;saveCloud();
+  fetch(cloudUrl("cashback_state?id=eq.main&select=data"),{headers:cloudHeaders()})
+    .then(r=>r.ok?r.json():Promise.reject("HTTP "+r.status))
+    .then(rows=>{
+      if(rows&&rows[0]&&rows[0].data){
+        confirmModal("クラウドから読み込み","クラウドに保存済みのデータがあります。この端末の表示をクラウドの内容に置き換えますか？（この端末に未保存のデータがある場合は上書きされます）",()=>{
+          DB=Object.assign({},DEFAULT,rows[0].data);DB.settings=Object.assign({},DEFAULT.settings,DB.settings||{});
+          localStorage.setItem(KEY,JSON.stringify(DB));setCloudStatus("idle");go("dashboard");toast("クラウドから読み込みました");
+        });
+        setCloudStatus("idle");renderSettings();
+      }else{
+        cloudPush().then(()=>{renderSettings();toast("この端末のデータをクラウドに保存しました");});
+      }
+    })
+    .catch(e=>{setCloudStatus("error");renderSettings();toast("接続に失敗しました："+e);});
+}
+function disableCloud(){CLOUD.enabled=false;saveCloud();setCloudStatus("off");renderSettings();toast("クラウド同期をOFFにしました（データはこの端末に残ります）");}
+function cloudReloadNow(){cloudPull().then(ok=>{if(ok){go("dashboard");toast("クラウドから再読み込みしました");}else toast("読み込みに失敗しました");});}
+function cloudTest(){
+  const url=val("cl_url").trim(),key=val("cl_key").trim();
+  if(!url||!key){toast("URLとanon keyを入力してください");return;}
+  const tmp={url,key};
+  fetch(url.replace(/\/+$/,"")+"/rest/v1/cashback_state?select=id&limit=1",{headers:{"apikey":key,"Authorization":"Bearer "+key}})
+    .then(r=>{if(r.ok)toast("接続OK（テーブル確認済み）");else if(r.status===404||r.status===400)toast("接続できましたが、テーブル未作成の可能性（SQLを実行してください）");else toast("接続失敗：HTTP "+r.status);})
+    .catch(e=>toast("接続失敗："+e.message));
+}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 
 /* =========================================================
@@ -936,9 +1008,38 @@ function renderSettings(){
     </div>
   </div>
   <div class="card">
+    <div class="card-h"><h2>クラウド同期（Supabase）</h2><span style="font-size:12px;color:var(--muted)" id="cloudStat2">${cloudStatusLabel()}</span></div>
+    <div class="card-b">
+      <p style="font-size:12.5px;color:var(--muted);margin-top:0">複数のパソコンで同じデータを見るには、Supabaseに保存して同期します。各端末で同じ URL と anon key を入力して「接続して同期」を押してください。<br>初回は、クラウドにデータがあればそれを読み込み、無ければこの端末のデータをアップロードします。</p>
+      <div class="grid c2">
+        <div class="field"><label>Supabase プロジェクト URL</label><input id="cl_url" value="${esc(CLOUD.url||"")}" placeholder="https://xxxx.supabase.co"></div>
+        <div class="field"><label>anon key（公開キー）<span class="hint">この端末にのみ保存されます</span></label><input id="cl_key" type="password" value="${esc(CLOUD.key||"")}" placeholder="eyJhbGciOi..."></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" onclick="cloudTest()">接続テスト</button>
+        ${cloudOn()
+          ? `<button class="btn" onclick="cloudReloadNow()">クラウドから再読み込み</button>
+             <button class="btn danger" onclick="disableCloud()">同期をOFFにする</button>`
+          : `<button class="btn primary" onclick="enableCloud()">接続して同期する</button>`}
+      </div>
+      <details style="margin-top:14px">
+        <summary style="cursor:pointer;font-size:12.5px;color:var(--teal);font-weight:600">初回セットアップ用 SQL（Supabaseで1回だけ実行）</summary>
+        <pre style="background:#0f1620;color:#cfe3df;padding:12px 14px;border-radius:8px;font-size:11.5px;overflow:auto;margin-top:8px;white-space:pre-wrap">create table if not exists cashback_state (
+  id text primary key,
+  data jsonb,
+  updated_at timestamptz default now()
+);
+alter table cashback_state enable row level security;
+create policy "anon_all" on cashback_state
+  for all to anon using (true) with check (true);</pre>
+        <p style="font-size:11.5px;color:var(--muted)">※ anon key はこの公開ページのソースには埋め込まれず、入力した端末のブラウザにのみ保存されます。共有PCでは入力しないでください。より厳密に保護する場合は Supabase Auth の導入も可能です。</p>
+      </details>
+    </div>
+  </div>
+  <div class="card">
     <div class="card-h"><h2>データのバックアップ</h2></div>
     <div class="card-b">
-      <p style="font-size:12.5px;color:var(--muted);margin-top:0">データはこのブラウザ内に保存されます。別の端末へ移す・定期的に保管する場合は JSON を書き出してください。</p>
+      <p style="font-size:12.5px;color:var(--muted);margin-top:0">クラウド同期を使わない場合や、定期保管・端末移行には JSON の書き出し／読み込みが使えます。</p>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn" onclick="exportJSON()">全データを書き出し（JSON）</button>
         <button class="btn" onclick="document.getElementById('imp').click()">JSONを読み込み</button>
@@ -1220,6 +1321,8 @@ function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t
 
 /* 起動 */
 go("dashboard");
+setCloudStatus(cloudOn()?"idle":"off");
+if(cloudOn()){ cloudPull().then(ok=>{ if(ok) go(current); }); }
 </script>
 </body>
 </html>
