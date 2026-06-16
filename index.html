@@ -222,7 +222,7 @@ tbody tr:hover{background:#f8fafc}
       <button data-tab="dashboard" class="active"><span class="ico">▤</span>ダッシュボード</button>
       <button data-tab="sources"><span class="ico">◍</span>紹介元 管理</button>
       <button data-tab="deals"><span class="ico">✎</span>紹介取引 登録</button>
-      <button data-tab="statement"><span class="ico">▦</span>支払明細書 発行</button>
+      <button data-tab="statement"><span class="ico">▦</span>請求書・申請書 発行</button>
       <button data-tab="csv"><span class="ico">⇪</span>CSV取込（Bカート）</button>
       <button data-tab="settings"><span class="ico">⚙</span>設定 / バックアップ</button>
     </nav>
@@ -314,7 +314,7 @@ const PAGES={
   dashboard:{t:"ダッシュボード",d:"紹介還元の状況と未払いを確認します",render:renderDashboard},
   sources:{t:"紹介元 管理",d:"個人・法人の紹介元と税率・振込先を管理します",render:renderSources},
   deals:{t:"紹介取引 登録",d:"購入のたびに紹介元・商品・マージン率を登録します",render:renderDeals},
-  statement:{t:"支払明細書 発行",d:"紹介元に代わって弊社が手数料の明細書を発行します",render:renderStatement},
+  statement:{t:"請求書・申請書 発行",d:"請求書（弊社発行／紹介元名義）と社内用の支払申請書を発行します",render:renderStatement},
   csv:{t:"CSV取込（Bカート）",d:"受注CSVを取り込み、商品明細から還元取引を自動作成します",render:renderImport},
   settings:{t:"設定 / バックアップ",d:"自社情報・端数処理・データの書き出し/読み込み",render:renderSettings}
 };
@@ -400,6 +400,13 @@ function orderMetaOf(d){
   const m=(d.note||"").match(/受注(\S+?)(?:\s|\/|（|$)/);
   const c=(d.note||"").match(/（([^（）]*)）\s*$/);
   return {orderNo:m?m[1]:"", company:c?c[1]:""};
+}
+// note を「常に表示する部分（受注番号など）」と「紹介先クリニック名（末尾の（…））」に分割
+function noteParts(note){
+  if(!note) return {base:"",clinic:""};
+  const m=note.match(/^([\s\S]*?)\s*（([^（）]*)）\s*$/);
+  if(m) return {base:m[1].trim(), clinic:m[2].trim()};
+  return {base:note.trim(), clinic:""};
 }
 function groupOrders(deals){
   const map={};
@@ -665,7 +672,7 @@ function delDeal(id){confirmModal("取引を削除","この取引を削除しま
 /* =========================================================
    支払明細書 発行（弊社が代行発行＝仕入明細書方式）
 ========================================================= */
-let stmt={sourceId:"",from:"",to:"",onlyUnpaid:false,mode:"pay"};
+let stmt={sourceId:"",from:"",to:"",onlyUnpaid:false,mode:"pay",showRef:true};
 function renderStatement(){
   const c=document.getElementById("content");
   if(DB.sources.length===0){c.innerHTML=`<div class="card"><div class="card-b">${emptyBox("紹介元がありません","先に紹介元と取引を登録してください")}</div></div>`;return;}
@@ -684,24 +691,32 @@ function renderStatement(){
           <div class="field"><label>対象期間（終了）</label><input id="s_to" type="date" class="num" value="${stmt.to}"></div>
           <div class="field"><label>対象</label><select id="s_unpaid"><option value="0" ${!stmt.onlyUnpaid?"selected":""}>全件</option><option value="1" ${stmt.onlyUnpaid?"selected":""}>未払のみ</option></select></div>
         </div>
-        <div class="field" style="max-width:560px"><label>発行形式</label>
-          <select id="s_mode">
-            <option value="pay" ${stmt.mode==="pay"?"selected":""}>弊社が発行（御中＝紹介元 ／ 発行元＝弊社）</option>
-            <option value="invoice" ${stmt.mode==="invoice"?"selected":""}>紹介元名義で代行発行（御中＝弊社 ／ 発行元＝紹介元）</option>
-          </select></div>
+        <div class="grid c2" style="max-width:780px">
+          <div class="field"><label>発行形式</label>
+            <select id="s_mode">
+              <option value="pay" ${stmt.mode==="pay"?"selected":""}>請求書：弊社が発行（御中＝紹介元 ／ 発行元＝弊社）</option>
+              <option value="invoice" ${stmt.mode==="invoice"?"selected":""}>請求書：紹介元名義で代行発行（御中＝弊社 ／ 発行元＝紹介元）</option>
+              <option value="request" ${stmt.mode==="request"?"selected":""}>支払申請書（社内用・振込手続き用）</option>
+            </select></div>
+          <div class="field"><label>紹介先クリニック名の記載 <span class="hint">受注番号は常に記載されます</span></label>
+            <select id="s_showref">
+              <option value="1" ${stmt.showRef!==false?"selected":""}>記載する</option>
+              <option value="0" ${stmt.showRef===false?"selected":""}>記載しない</option>
+            </select></div>
+        </div>
         <div style="display:flex;gap:10px">
-          <button class="btn primary" onclick="buildStatement()">明細書を作成</button>
+          <button class="btn primary" onclick="buildStatement()">作成</button>
           <button class="btn" onclick="window.print()">印刷 / PDF保存</button>
           <button class="btn" onclick="markPeriodPaid()">対象期間を支払済にする</button>
         </div>
       </div>
     </div>
     <div id="stmtOut" style="margin-top:18px"></div>`;
-  ["s_src","s_from","s_to","s_unpaid","s_mode"].forEach(id=>document.getElementById(id).addEventListener("change",()=>{syncStmt();buildStatement();}));
+  ["s_src","s_from","s_to","s_unpaid","s_mode","s_showref"].forEach(id=>document.getElementById(id).addEventListener("change",()=>{syncStmt();buildStatement();}));
   buildStatement();
 }
 function syncStmt(){
-  stmt.sourceId=val("s_src");stmt.from=val("s_from");stmt.to=val("s_to");stmt.onlyUnpaid=val("s_unpaid")==="1";stmt.mode=val("s_mode")||"pay";
+  stmt.sourceId=val("s_src");stmt.from=val("s_from");stmt.to=val("s_to");stmt.onlyUnpaid=val("s_unpaid")==="1";stmt.mode=val("s_mode")||"pay";stmt.showRef=val("s_showref")!=="0";
 }
 function periodDeals(){
   syncStmt();
@@ -730,7 +745,96 @@ function buildStatement(){
   const co=DB.company,bank=s.bank||{};
   const docNo=`${(s.name||"").slice(0,4)}-${(stmt.to||"").replace(/-/g,"")}`;
   const issueDate=new Date().toISOString().slice(0,10).replace(/-/g,"/");
-  const invoice = stmt.mode==="invoice"; // true: 紹介元名義の請求書 / false: 弊社発行の支払明細書
+  const invoice = stmt.mode==="invoice"; // true: 紹介元名義の請求書 / false: 弊社発行
+  const showRef = stmt.showRef!==false;  // 紹介先クリニック名の記載（受注番号は常に記載）
+  const refHtml = d => {
+    if(!d.note) return "";
+    const p = noteParts(d.note);
+    let s="";
+    if(p.base)   s+=`　<span style="color:#888">${esc(p.base)}</span>`;
+    if(showRef && p.clinic) s+=`<span style="color:#888">（${esc(p.clinic)}）</span>`;
+    return s;
+  };
+  const lineRows = ds.map(d=>`<tr>
+        <td class="num">${(d.date||"").replace(/-/g,"/")}</td>
+        <td>${esc(d.productName||"紹介手数料")}${refHtml(d)}</td>
+        <td class="r num">${yen(d.baseAmount)}</td>
+        <td class="r num">${d.marginRate}%</td>
+        <td class="r num">${effRate(d)}%</td>
+        <td class="r num">${yen(feeOf(d))}</td>
+      </tr>`).join("");
+  const headRow = `<thead><tr><th style="width:90px">取引日</th><th>商品 / 内容</th><th style="width:90px" class="r">対象金額</th><th style="width:54px" class="r">紹介%</th><th style="width:50px" class="r">税率</th><th style="width:100px" class="r">手数料(税抜)</th></tr></thead>`;
+  const taxTable = `<table class="doc-tax">
+      ${taxRows.map(t=>`<tr><td>${t.r}%対象 小計（税抜）</td><td class="r num">${yen(t.net)}</td></tr>
+        <tr><td>消費税（${t.r}%）</td><td class="r num">${yen(t.tax)}</td></tr>`).join("")}
+      <tr><td>合計（税抜）</td><td class="r num">${yen(netTotal)}</td></tr>
+      <tr><td>消費税 合計</td><td class="r num">${yen(taxTotal)}</td></tr>
+      <tr class="grand"><td>__AMTLABEL__</td><td class="r num">${yen(grand)}</td></tr>
+    </table>`;
+  const bankBlock = (bank.bank||bank.number)?`<div class="doc-bank">
+      <div class="h">__BANKLABEL__</div>
+      ${esc(bank.bank||"")} ${esc(bank.branch||"")} ／ ${esc(bank.type||"普通")} ${esc(bank.number||"")}<br>
+      口座名義：${esc(bank.holder||"")}
+    </div>`:"";
+
+  // ===== 支払申請書（社内用・振込手続き用）=====
+  if(stmt.mode==="request"){
+    out.innerHTML=`
+    <div class="card"><div class="card-b doc">
+     <div class="doc-inner">
+      <h2 class="title">支 払 申 請 書</h2>
+      <div class="doc-no">No. ${esc(docNo)}　申請日 ${issueDate}</div>
+      <div class="doc-meta">
+        <div class="doc-to">
+          <div class="line">件名：紹介手数料のお支払い</div>
+          <div class="line" style="margin-top:4px">支払方法：銀行振込</div>
+          <div class="line" style="margin-top:4px">支払予定日：　　　　年　　月　　日</div>
+          <div class="line" style="margin-top:4px">対象期間：${(stmt.from||"").replace(/-/g,"/")} 〜 ${(stmt.to||"").replace(/-/g,"/")}　（${ds.length}件）</div>
+        </div>
+        <div class="doc-from">
+          <div class="co">${esc(co.name||"自社名未設定")}</div>
+          <div>申請者：${esc(co.rep||"　　　　　　")}　㊞</div>
+        </div>
+      </div>
+
+      <div class="doc-bank" style="margin-top:0;margin-bottom:18px">
+        <div class="h">支払先</div>
+        <div style="font-size:14px;font-weight:700">${esc(s.name)}</div>
+        ${s.address?`<div>${esc(s.address)}</div>`:""}
+        ${s.tel?`<div>TEL ${esc(s.tel)}</div>`:""}
+        ${(s.invoiceRegistered&&s.invoiceNumber)?`<div>登録番号 ${esc(s.invoiceNumber)}</div>`:""}
+      </div>
+
+      <div class="doc-claim">
+        <div class="l">支払金額（税込）</div>
+        <div class="amt num"><span class="yen2">¥</span>${yen(grand)}</div>
+      </div>
+
+      <table>${headRow}<tbody>${lineRows}</tbody></table>
+      ${taxTable.replace("__AMTLABEL__","支払金額（税込）")}
+      ${bankBlock.replace("__BANKLABEL__","振込先口座")}
+
+      <table style="width:100%;border-collapse:collapse;margin-top:20px;font-size:12px">
+        <tr>
+          <th style="border:1px solid #d8dee6;background:#1a2332;color:#fff;padding:7px;width:25%">申請</th>
+          <th style="border:1px solid #d8dee6;background:#1a2332;color:#fff;padding:7px;width:25%">確認</th>
+          <th style="border:1px solid #d8dee6;background:#1a2332;color:#fff;padding:7px;width:25%">承認</th>
+          <th style="border:1px solid #d8dee6;background:#1a2332;color:#fff;padding:7px;width:25%">経理処理</th>
+        </tr>
+        <tr>
+          <td style="border:1px solid #d8dee6;height:70px"></td>
+          <td style="border:1px solid #d8dee6;height:70px"></td>
+          <td style="border:1px solid #d8dee6;height:70px"></td>
+          <td style="border:1px solid #d8dee6;height:70px"></td>
+        </tr>
+      </table>
+
+      <div class="doc-agree">※ 本申請書は社内の振込手続き・承認用です。承認後、上記の振込先口座へお振込みください。</div>
+     </div>
+    </div></div>`;
+    return;
+  }
+
 
   // 宛先（御中）と発行元の当事者データ
   const sParty={name:s.name,address:s.address,tel:s.tel,contact:s.contact,reg:(s.invoiceRegistered&&s.invoiceNumber)?s.invoiceNumber:"",rep:""};
@@ -776,33 +880,13 @@ function buildStatement(){
       <div class="amt num"><span class="yen2">¥</span>${yen(grand)}</div>
     </div>
 
-    <table>
-      <thead><tr><th style="width:90px">取引日</th><th>商品 / 内容</th><th style="width:90px" class="r">対象金額</th><th style="width:54px" class="r">紹介%</th><th style="width:50px" class="r">税率</th><th style="width:100px" class="r">手数料(税抜)</th></tr></thead>
-      <tbody>
-      ${ds.map(d=>`<tr>
-        <td class="num">${(d.date||"").replace(/-/g,"/")}</td>
-        <td>${esc(d.productName||"紹介手数料")}${d.note?`　<span style="color:#888">${esc(d.note)}</span>`:""}</td>
-        <td class="r num">${yen(d.baseAmount)}</td>
-        <td class="r num">${d.marginRate}%</td>
-        <td class="r num">${effRate(d)}%</td>
-        <td class="r num">${yen(feeOf(d))}</td>
-      </tr>`).join("")}
-      </tbody>
+    <table>${headRow}
+      <tbody>${lineRows}</tbody>
     </table>
 
-    <table class="doc-tax">
-      ${taxRows.map(t=>`<tr><td>${t.r}%対象 小計（税抜）</td><td class="r num">${yen(t.net)}</td></tr>
-        <tr><td>消費税（${t.r}%）</td><td class="r num">${yen(t.tax)}</td></tr>`).join("")}
-      <tr><td>合計（税抜）</td><td class="r num">${yen(netTotal)}</td></tr>
-      <tr><td>消費税 合計</td><td class="r num">${yen(taxTotal)}</td></tr>
-      <tr class="grand"><td>${amtLabel}</td><td class="r num">${yen(grand)}</td></tr>
-    </table>
+    ${taxTable.replace("__AMTLABEL__",amtLabel)}
 
-    ${(bank.bank||bank.number)?`<div class="doc-bank">
-      <div class="h">お振込先</div>
-      ${esc(bank.bank||"")} ${esc(bank.branch||"")} ／ ${esc(bank.type||"普通")} ${esc(bank.number||"")}<br>
-      口座名義：${esc(bank.holder||"")}
-    </div>`:""}
+    ${bankBlock.replace("__BANKLABEL__","お振込先")}
 
     <div class="doc-note">対象期間：${(stmt.from||"").replace(/-/g,"/")} 〜 ${(stmt.to||"").replace(/-/g,"/")}</div>
     <div class="doc-agree">
@@ -1072,7 +1156,7 @@ function importOrder(oi){
       id:uid(),sourceId:srcId,date:o.date,
       productName:l.name,baseAmount:l.sub,marginRate:rate,
       taxRateOverride:null,
-      note:`Bカート 受注${o.orderNo||o.orderId}${l.code?" / "+l.code:""}（${esc(o.company)}）`,
+      note:`Bカート 受注${o.orderNo||o.orderId}${l.code?" / "+l.code:""}（${o.company}）`,
       paid:false,importKey:ikey(o.orderId,l)
     });
     if(l.code)DB.productMargins[l.code]=rate; // 商品別マージンを記憶
@@ -1090,7 +1174,7 @@ function importAll(){
       if(l.already)return;
       const rate=parseFloat(val(`mr_${oi}_${li}`))||0;
       if(rate<0||rate>10)return;
-      DB.deals.push({id:uid(),sourceId:srcId,date:o.date,productName:l.name,baseAmount:l.sub,marginRate:rate,taxRateOverride:null,note:`Bカート 受注${o.orderNo||o.orderId}${l.code?" / "+l.code:""}（${esc(o.company)}）`,paid:false,importKey:ikey(o.orderId,l)});
+      DB.deals.push({id:uid(),sourceId:srcId,date:o.date,productName:l.name,baseAmount:l.sub,marginRate:rate,taxRateOverride:null,note:`Bカート 受注${o.orderNo||o.orderId}${l.code?" / "+l.code:""}（${o.company}）`,paid:false,importKey:ikey(o.orderId,l)});
       if(l.code)DB.productMargins[l.code]=rate;l.already=true;done++;
     });
   });
