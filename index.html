@@ -590,7 +590,7 @@ function orderDetail(g){
   const lines=[...g.lines].sort((a,b)=>(a.date||"").localeCompare(b.date||""));
   return `<div style="padding:6px 16px 14px">
     <table style="margin:0;font-size:12.5px">
-      <thead><tr><th>取引日</th><th>商品 / 内容</th><th class="r">対象金額</th><th class="r">率</th><th class="r">税率</th><th class="r">手数料(税抜)</th><th class="r">税込</th><th>状態</th><th class="r">操作</th></tr></thead>
+      <thead><tr><th>取引日</th><th>商品 / 内容</th><th class="r">対象金額</th><th class="r">紹介%</th><th class="r">税率</th><th class="r">手数料(税抜)</th><th class="r">税込</th><th>状態</th><th class="r">操作</th></tr></thead>
       <tbody>${lines.map(d=>{const f=feeOf(d),t=lineTaxOf(d);return `<tr>
         <td class="num">${d.date||"-"}</td>
         <td><strong>${esc(d.productName||"-")}</strong>${d.note?`<div style="font-size:11px;color:var(--muted)">${esc(d.note)}</div>`:""}</td>
@@ -777,7 +777,7 @@ function buildStatement(){
     </div>
 
     <table>
-      <thead><tr><th style="width:90px">取引日</th><th>商品 / 内容</th><th style="width:90px" class="r">対象金額</th><th style="width:50px" class="r">率</th><th style="width:50px" class="r">税率</th><th style="width:100px" class="r">手数料(税抜)</th></tr></thead>
+      <thead><tr><th style="width:90px">取引日</th><th>商品 / 内容</th><th style="width:90px" class="r">対象金額</th><th style="width:54px" class="r">紹介%</th><th style="width:50px" class="r">税率</th><th style="width:100px" class="r">手数料(税抜)</th></tr></thead>
       <tbody>
       ${ds.map(d=>`<tr>
         <td class="num">${(d.date||"").replace(/-/g,"/")}</td>
@@ -836,7 +836,7 @@ function renderSettings(){
       <div class="field"><label>住所</label><input id="c_addr" value="${esc(co.address||"")}"></div>
       <div class="grid c2">
         <div class="field"><label>電話番号</label><input id="c_tel" value="${esc(co.tel||"")}"></div>
-        <div class="field"><label>自社の登録番号 <span class="hint">T＋13桁</span></label><input id="c_inv" class="num" value="${esc(co.invoiceNumber||"")}"></div>
+        <div class="field"><label>事業者登録番号（自社）<span class="hint">T＋13桁・発行元欄に記載</span></label><input id="c_inv" class="num" value="${esc(co.invoiceNumber||"")}" placeholder="T1234567890123"></div>
       </div>
     </div>
   </div>
