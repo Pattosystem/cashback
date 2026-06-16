@@ -386,20 +386,57 @@ function sourceSummaryTable(){
     <thead><tr><th>紹介元</th><th>既定税率</th><th class="r">件数</th><th class="r">手数料(税抜)</th><th class="r">支払(税込)</th><th class="r">未払</th></tr></thead>
     <tbody>${rows}</tbody></table></div>`;
 }
+// 案件（注文）単位のグルーピング
+function orderKeyOf(d){
+  if(d.importKey && d.importKey.indexOf("#")>-1) return d.importKey.split("#")[0]; // bcart:{受注ID}
+  return "single:"+d.id; // 手入力は1件＝1案件
+}
+function orderMetaOf(d){
+  const m=(d.note||"").match(/受注(\S+?)(?:\s|\/|（|$)/);
+  const c=(d.note||"").match(/（([^（）]*)）\s*$/);
+  return {orderNo:m?m[1]:"", company:c?c[1]:""};
+}
+function groupOrders(deals){
+  const map={};
+  deals.forEach(d=>{
+    const k=orderKeyOf(d);
+    if(!map[k])map[k]={key:k,sourceId:d.sourceId,date:d.date||"",lines:[],fee:0,tax:0,base:0,paidCount:0,orderNo:"",company:""};
+    const g=map[k];
+    g.lines.push(d);
+    g.fee+=feeOf(d);g.tax+=lineTaxOf(d);g.base+=(d.baseAmount||0);
+    if(d.paid)g.paidCount++;
+    if((d.date||"")>g.date)g.date=d.date;
+    const meta=orderMetaOf(d);
+    if(meta.orderNo&&!g.orderNo)g.orderNo=meta.orderNo;
+    if(meta.company&&!g.company)g.company=meta.company;
+  });
+  return Object.values(map);
+}
+function orderStatusTag(g){
+  if(g.paidCount>=g.lines.length)return '<span class="tag paid">支払済</span>';
+  if(g.paidCount===0)return '<span class="tag unpaid">未払</span>';
+  return `<span class="tag" style="background:var(--amber-bg);color:var(--amber)">一部 ${g.paidCount}/${g.lines.length}</span>`;
+}
+function orderLabel(g){
+  const first=g.lines[0]?.productName||"（明細）";
+  const more=g.lines.length>1?` <span style="color:var(--muted)">他${g.lines.length-1}件</span>`:"";
+  const sub=[g.company,g.orderNo?("受注"+g.orderNo):""].filter(Boolean).join("　");
+  return `${esc(first)}${more}${sub?`<div style="font-size:11px;color:var(--muted)">${esc(sub)}</div>`:""}`;
+}
 function recentDealsTable(){
-  const ds=[...DB.deals].sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,8);
-  if(ds.length===0)return emptyBox("取引がまだありません","「紹介取引 登録」から購入実績を入力してください");
+  if(DB.deals.length===0)return emptyBox("取引がまだありません","「紹介取引 登録」または「CSV取込」から実績を入力してください");
+  const orders=groupOrders(DB.deals).sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,8);
   return `<div class="tbl-wrap"><table>
-    <thead><tr><th>日付</th><th>紹介元</th><th>商品</th><th class="r">対象額</th><th class="r">率</th><th class="r">手数料(税抜)</th><th class="r">税込</th><th>状態</th></tr></thead>
-    <tbody>${ds.map(d=>`<tr>
-      <td class="num">${d.date||"-"}</td>
-      <td>${esc(srcName(d.sourceId))}</td>
-      <td>${esc(d.productName||"-")}</td>
-      <td class="r num yen">${yen(d.baseAmount)}</td>
-      <td class="r num">${d.marginRate}%</td>
-      <td class="r num yen">${yen(feeOf(d))}</td>
-      <td class="r num yen">${yen(feeOf(d)+lineTaxOf(d))}</td>
-      <td>${d.paid?'<span class="tag paid">支払済</span>':'<span class="tag unpaid">未払</span>'}</td>
+    <thead><tr><th>日付</th><th>紹介元</th><th>案件（商品）</th><th class="r">対象額 計</th><th class="r">商品数</th><th class="r">手数料(税抜)</th><th class="r">税込</th><th>状態</th></tr></thead>
+    <tbody>${orders.map(g=>`<tr>
+      <td class="num">${g.date||"-"}</td>
+      <td>${esc(srcName(g.sourceId))}</td>
+      <td>${orderLabel(g)}</td>
+      <td class="r num yen">${yen(g.base)}</td>
+      <td class="r num">${g.lines.length}</td>
+      <td class="r num yen">${yen(g.fee)}</td>
+      <td class="r num yen"><strong>${yen(g.fee+g.tax)}</strong></td>
+      <td>${orderStatusTag(g)}</td>
     </tr>`).join("")}</tbody></table></div>`;
 }
 
