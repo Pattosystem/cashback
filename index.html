@@ -269,7 +269,8 @@ const DEFAULT={
   },
   sources:[],
   deals:[],
-  productMargins:{}                   // 商品管理番号 -> 既定マージン率（取込時の初期値）
+  productMargins:{},                  // 商品管理番号 -> 既定マージン率（取込時の初期値）
+  orderMeta:{}                        // 案件キー -> {pdf:{name,data}, remitDate}（PDF添付・送金日）
 };
 function load(){
   try{const r=localStorage.getItem(KEY);if(r){
@@ -347,6 +348,12 @@ function enableCloud(){
 }
 function disableCloud(){CLOUD.enabled=false;saveCloud();setCloudStatus("off");renderSettings();toast("クラウド同期をOFFにしました（データはこの端末に残ります）");}
 function cloudReloadNow(){cloudPull().then(ok=>{if(ok){go("dashboard");toast("クラウドから再読み込みしました");}else toast("読み込みに失敗しました");});}
+function cloudPushNow(){
+  if(!cloudOn()){toast("先に接続してください");return;}
+  confirmModal("クラウドへ保存（上書き）","この端末のデータでクラウドの内容を上書きします。よろしいですか？",()=>{
+    cloudPush().then(ok=>{ if(ok)toast("クラウドへ保存しました（この端末の内容で上書き）"); });
+  });
+}
 function cloudTest(){
   const url=val("cl_url").trim(),key=val("cl_key").trim();
   if(!url||!key){toast("URLとanon keyを入力してください");return;}
@@ -648,9 +655,10 @@ function drawDeals(){
   const el=document.getElementById("dealList");
   if(orders.length===0){el.innerHTML=emptyBox("該当する取引がありません","");return;}
   el.innerHTML=`<div class="tbl-wrap"><table>
-    <thead><tr><th style="width:24px"></th><th>日付</th><th>紹介元</th><th>案件（商品）</th><th class="r">対象額 計</th><th class="r">商品数</th><th class="r">手数料(税抜)</th><th class="r">税込</th><th>状態</th></tr></thead>
+    <thead><tr><th style="width:24px"></th><th>日付</th><th>紹介元</th><th>案件（商品）</th><th class="r">対象額 計</th><th class="r">商品数</th><th class="r">手数料(税抜)</th><th class="r">税込</th><th>状態</th><th>経理（PDF/送金日）</th></tr></thead>
     <tbody>${orders.map(g=>{
       const open=expandedOrders.has(g.key);
+      const m=(DB.orderMeta||{})[g.key]||{};
       return `<tr style="cursor:pointer;${open?"background:#eef6f4":""}" onclick="toggleOrder('${g.key}')">
         <td style="text-align:center;color:var(--muted);font-size:11px">${open?"▾":"▸"}</td>
         <td class="num">${g.date||"-"}</td>
@@ -661,12 +669,15 @@ function drawDeals(){
         <td class="r num yen">${yen(g.fee)}</td>
         <td class="r num yen"><strong>${yen(g.fee+g.tax)}</strong></td>
         <td>${orderStatusTag(g)}</td>
+        <td style="font-size:11px;white-space:nowrap">${m.pdf?'<span title="PDF添付あり">📎</span>':'<span style="color:var(--muted-2)">—</span>'} ${m.remitDate?`<span style="color:var(--teal);font-weight:600">送金 ${m.remitDate}</span>`:''}</td>
       </tr>
-      ${open?`<tr><td colspan="9" style="padding:0;background:#fafbfc">${orderDetail(g)}</td></tr>`:""}`;
+      ${open?`<tr><td colspan="10" style="padding:0;background:#fafbfc">${orderDetail(g)}</td></tr>`:""}`;
     }).join("")}</tbody></table></div>`;
 }
 function orderDetail(g){
   const lines=[...g.lines].sort((a,b)=>(a.date||"").localeCompare(b.date||""));
+  const m=(DB.orderMeta||{})[g.key]||{};
+  const totalTax=g.fee+g.tax;
   return `<div style="padding:6px 16px 14px">
     <table style="margin:0;font-size:12.5px">
       <thead><tr><th>取引日</th><th>商品 / 内容</th><th class="r">対象金額</th><th class="r">紹介%</th><th class="r">税率</th><th class="r">手数料(税抜)</th><th class="r">税込</th><th>状態</th><th class="r">操作</th></tr></thead>
@@ -682,7 +693,55 @@ function orderDetail(g){
         <td class="r"><button class="btn sm" onclick="openDeal('${d.id}')">編集</button><button class="btn sm danger" onclick="delDeal('${d.id}')">削除</button></td>
       </tr>`;}).join("")}</tbody>
     </table>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:center;margin-top:12px;padding:12px 14px;background:#fff;border:1px solid var(--line);border-radius:8px">
+      <div style="font-size:12px;font-weight:700;color:var(--teal)">経理処理　<span style="color:var(--muted);font-weight:400">支払額（税込）¥${yen(totalTax)}</span></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--ink-2)">請求書PDF：</span>
+        ${m.pdf
+          ? `<span style="font-size:12px">📎 ${esc(m.pdf.name)}</span>
+             <button class="btn sm" onclick="downloadPDF('${g.key}')">ダウンロード</button>
+             <label class="btn sm" style="cursor:pointer">差し替え<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="attachPDF('${g.key}',this)"></label>
+             <button class="btn sm danger" onclick="removePDF('${g.key}')">削除</button>`
+          : `<label class="btn sm primary" style="cursor:pointer">PDFを添付<input type="file" accept="application/pdf,.pdf" style="display:none" onchange="attachPDF('${g.key}',this)"></label>`}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--ink-2)">送金日：</span>
+        <input type="date" class="num" style="width:auto;display:inline-block;padding:6px 9px" value="${m.remitDate||''}" onchange="setRemit('${g.key}',this.value)">
+        ${m.remitDate?`<button class="btn sm ghost" onclick="setRemit('${g.key}','')">クリア</button>`:''}
+      </div>
+    </div>
   </div>`;
+}
+// ===== 経理：PDF添付・送金日 =====
+function attachPDF(key,input){
+  const f=input.files&&input.files[0];if(!f)return;
+  if(f.type!=="application/pdf" && !/\.pdf$/i.test(f.name)){toast("PDFファイルを選んでください");return;}
+  if(f.size>4*1024*1024){toast("PDFが大きすぎます（4MBまで）。圧縮してください");return;}
+  const r=new FileReader();
+  r.onload=()=>{
+    if(!DB.orderMeta)DB.orderMeta={};
+    const m=DB.orderMeta[key]||(DB.orderMeta[key]={});
+    m.pdf={name:f.name,data:r.result};
+    save();drawDeals();toast("PDFを添付しました");
+  };
+  r.readAsDataURL(f);
+}
+function downloadPDF(key){
+  const m=(DB.orderMeta||{})[key];if(!m||!m.pdf)return;
+  const a=document.createElement("a");a.href=m.pdf.data;a.download=m.pdf.name||"請求書.pdf";document.body.appendChild(a);a.click();a.remove();
+}
+function removePDF(key){
+  confirmModal("PDFを削除","この案件に添付したPDFを削除します。よろしいですか？",()=>{
+    if(DB.orderMeta&&DB.orderMeta[key]){delete DB.orderMeta[key].pdf;save();drawDeals();toast("PDFを削除しました");}
+  });
+}
+function setRemit(key,value){
+  if(!DB.orderMeta)DB.orderMeta={};
+  const m=DB.orderMeta[key]||(DB.orderMeta[key]={});
+  m.remitDate=value||"";
+  if(value){ DB.deals.forEach(d=>{ if(orderKeyOf(d)===key) d.paid=true; }); } // 送金日入力で支払済に
+  save();drawDeals();renderDealsBadge();
+  toast(value?"送金日を記録しました（支払済に更新）":"送金日をクリアしました");
 }
 function openDeal(id){
   const d=id?DB.deals.find(x=>x.id===id):{date:new Date().toISOString().slice(0,10),marginRate:5,baseAmount:0};
@@ -1018,7 +1077,8 @@ function renderSettings(){
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn" onclick="cloudTest()">接続テスト</button>
         ${cloudOn()
-          ? `<button class="btn" onclick="cloudReloadNow()">クラウドから再読み込み</button>
+          ? `<button class="btn primary" onclick="cloudPushNow()">この端末の内容をクラウドへ保存（上書き）</button>
+             <button class="btn" onclick="cloudReloadNow()">クラウドから読み込み（この端末に反映）</button>
              <button class="btn danger" onclick="disableCloud()">同期をOFFにする</button>`
           : `<button class="btn primary" onclick="enableCloud()">接続して同期する</button>`}
       </div>
